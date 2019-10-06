@@ -1,0 +1,12 @@
+{
+  "title": "Your answer",
+  "submit_label": "Submit",
+  "callback_id": "answer",
+  "elements": [
+      {
+          "label": "",
+          "name": "comment",
+          "type": "textarea"
+      }
+  ]
+}
