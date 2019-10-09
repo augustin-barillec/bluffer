@@ -1,0 +1,11 @@
+{
+  "title": "You have already answered !",
+  "callback_id": "already answered",
+  "elements": [
+      {
+          "label": "",
+          "name": "comment",
+          "type": "textarea"
+      }
+  ]
+}
