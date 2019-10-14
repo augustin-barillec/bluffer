@@ -2,6 +2,6 @@
 	"type": "section",
 	"text": {
 		"type": "mrkdwn",
-		"text": "Time remaining: "
+		"text": ""
 	}
 }
