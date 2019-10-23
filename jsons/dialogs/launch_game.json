@@ -1,0 +1,27 @@
+{
+  "title": "Your question",
+  "submit_label": "Submit",
+  "callback_id": "launch_game",
+  "elements": [
+        {
+            "type": "text",
+            "label": "Question",
+            "name": "question"
+        },
+        {
+            "type": "text",
+            "label": "Answer",
+            "name": "answer"
+        },
+        {
+            "type": "text",
+            "label": "Time to guess",
+            "name": "time_to_guess"
+        },
+        {
+            "type": "text",
+            "label": "Time to vote",
+            "name": "time_to_vote"
+        }
+  ]
+}

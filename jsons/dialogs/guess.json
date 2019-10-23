@@ -1,7 +1,7 @@
 {
-  "title": "Your answer",
+  "title": "Your guess",
   "submit_label": "Submit",
-  "callback_id": "answer",
+  "callback_id": "guess",
   "elements": [
       {
           "label": "",
