@@ -7,14 +7,14 @@
 			"type": "section",
 			"text": {
 				"type": "mrkdwn",
-				"text": "{question}"
+				"text": "{}"
 			}
 		},
 		{
 			"type": "section",
 			"text": {
 				"type": "mrkdwn",
-				"text": "Time remaining to guess: {time_remaining_to_guess}"
+				"text": "Time remaining to guess: {}"
 			}
 		},
 		{
@@ -35,7 +35,7 @@
 			"type": "section",
 			"text": {
 				"type": "plain_text",
-				"text": "Players are: {players}",
+				"text": "Players are: {}",
 				"emoji": true
 			}
 		},
@@ -46,7 +46,7 @@
 			"type": "section",
 			"text": {
 				"type": "mrkdwn",
-				"text": "Time remaining to vote: {time_remaining_to_vote}"
+				"text": "Time remaining to vote: {}"
 			}
 		},
 		{
@@ -67,7 +67,7 @@
 			"type": "section",
 			"text": {
 				"type": "plain_text",
-				"text": "Voters are: {voters}",
+				"text": "Voters are: {}",
 				"emoji": true
 			}
 		},
@@ -86,7 +86,7 @@
 			"type": "section",
 			"text": {
 				"type": "plain_text",
-				"text": "Results: {results}",
+				"text": "Results: {}",
 				"emoji": true
 			}
 		},

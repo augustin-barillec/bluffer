@@ -1,5 +1,6 @@
 {
-    "type": "modal",
+	"type": "modal",
+	"callback_id": "game_setup",
 	"title": {
 		"type": "plain_text",
 		"text": "bluffer",
@@ -15,7 +16,6 @@
 		"text": "Cancel",
 		"emoji": true
 	},
-	"callback_id": "game_setup",
 	"blocks": [
 		{
 			"type": "section",
@@ -29,34 +29,41 @@
 		},
 		{
 			"type": "input",
-			"element": {
-				"type": "plain_text_input"
-			},
+			"block_id": "question",
 			"label": {
 				"type": "plain_text",
 				"text": "Question",
 				"emoji": true
+			},
+			"element": {
+				"type": "plain_text_input",
+				"action_id": "question"
 			}
 		},
 		{
 			"type": "input",
-			"element": {
-				"type": "plain_text_input"
-			},
+			"block_id": "answer",
 			"label": {
 				"type": "plain_text",
 				"text": "Answer",
 				"emoji": true
+			},
+			"element": {
+				"type": "plain_text_input",
+				"action_id": "answer"
 			}
 		},
 		{
-			"type": "section",
-			"text": {
-				"type": "mrkdwn",
-				"text": "Time to guess"
+			"type": "input",
+			"block_id": "time_to_guess",
+            "label": {
+				"type": "plain_text",
+				"text": "Time to guess",
+				"emoji": true
 			},
-			"accessory": {
+			"element": {
 				"type": "static_select",
+				"action_id": "time_to_guess",
 				"placeholder": {
 					"type": "plain_text",
 					"text": "Select an item",
@@ -69,7 +76,7 @@
 							"text": "5 min",
 							"emoji": true
 						},
-						"value": "value-0"
+						"value": "5"
 					},
 					{
 						"text": {
@@ -77,7 +84,7 @@
 							"text": "10 min",
 							"emoji": true
 						},
-						"value": "value-1"
+						"value": "10"
 					},
 					{
 						"text": {
@@ -85,7 +92,7 @@
 							"text": "15 min",
 							"emoji": true
 						},
-						"value": "value-2"
+						"value": "15"
 					},
 					{
 						"text": {
@@ -93,27 +100,30 @@
 							"text": "20 min",
 							"emoji": true
 						},
-						"value": "value-3"
+						"value": "20"
 					}
 				],
-                "initial_option": {
-						"text": {
-							"type": "plain_text",
-							"text": "15 min",
-							"emoji": true
-						},
-						"value": "value-2"
+				"initial_option": {
+					"text": {
+						"type": "plain_text",
+						"text": "15 min",
+						"emoji": true
+					},
+					"value": "15"
 				}
 			}
 		},
 		{
-			"type": "section",
-			"text": {
-				"type": "mrkdwn",
-				"text": "Time to vote"
+			"type": "input",
+			"block_id": "time_to_vote",
+            "label": {
+				"type": "plain_text",
+				"text": "Time to vote",
+				"emoji": true
 			},
-			"accessory": {
+			"element": {
 				"type": "static_select",
+				"action_id": "time_to_vote",
 				"placeholder": {
 					"type": "plain_text",
 					"text": "Select an item",
@@ -126,7 +136,7 @@
 							"text": "5 min",
 							"emoji": true
 						},
-						"value": "value-0"
+						"value": "5"
 					},
 					{
 						"text": {
@@ -134,16 +144,16 @@
 							"text": "10 min",
 							"emoji": true
 						},
-						"value": "value-1"
+						"value": "10"
 					}
 				],
-                "initial_option": {
-						"text": {
-							"type": "plain_text",
-							"text": "5 min",
-							"emoji": true
-						},
-						"value": "value-0"
+				"initial_option": {
+					"text": {
+						"type": "plain_text",
+						"text": "5 min",
+						"emoji": true
+					},
+					"value": "5"
 				}
 			}
 		}
