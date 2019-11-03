@@ -17,21 +17,22 @@ def command():
     channel_id = request.form['channel_id']
     organizer_id = request.form['user_id']
     game = Game(trigger_id, channel_id, organizer_id, slack_client)
-    games[trigger_id] = game
-    game.launch_setup()
+    games[organizer_id] = game
+    game.ask_setup()
     return make_response("", 200)
 
 
 @app.route("/slack/message_actions", methods=["POST"])
 def message_actions():
     message_action = json.loads(request.form["payload"])
+    user_id = message_action['user']['id']
     if message_action["type"] == "view_submission":
-        trigger_id = message_action['trigger_id']
         view = message_action["view"]
         if view["callback_id"] == "game_setup":
-            game = games[trigger_id]
+            organizer_id = user_id
+            game = games[organizer_id]
             game.collect_setup(view)
-            game.show_guess_board()
+            game.start()
     return make_response("", 200)
 
 

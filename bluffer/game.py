@@ -1,7 +1,11 @@
-from bluffer.utils import get_modal, get_message
+from copy import deepcopy
+from bluffer.utils import get_modal, get_block
 
 game_setup = get_modal(__file__, 'game_setup.json')
-board_blocks = get_message(__file__, 'board.json')['blocks']
+button_block = get_block(__file__, 'button.json')
+divider_block = get_block(__file__, 'divider.json')
+image_block = get_block(__file__, 'image.json')
+text_block = get_block(__file__, 'text.json')
 
 
 class Game:
@@ -11,30 +15,24 @@ class Game:
         self.organizer_id = organizer_id
         self.slack_client = slack_client
 
-        self.is_launched = False
         self.question = None
         self.answer = None
         self.time_to_guess = None
         self.time_to_vote = None
-        self.results = None
-
-        self.divider_block = board_blocks[0]
-        self.question_block = board_blocks[1]
-        self.time_to_guess_block = board_blocks[2]
-        self.your_guess_block = board_blocks[3]
-        self.players_block = board_blocks[4]
-        self.time_to_vote_block = board_blocks[5]
-        self.your_vote_block = board_blocks[6]
-        self.voters_block = board_blocks[7]
-        self.truth_block = board_blocks[8]
-        self.results_block = board_blocks[9]
-        self.graph_block = board_blocks[10]
 
     @staticmethod
-    def format_block(block, message):
-        return block.format(message)
+    def text_block(message):
+        res = deepcopy(text_block)
+        res['text']['text'] = message
+        return res
 
-    def launch_setup(self):
+    @staticmethod
+    def button_block(message):
+        res = deepcopy(button_block)
+        res['elements'][0]['text']['text'] = message
+        return res
+
+    def ask_setup(self):
         self.slack_client.api_call(
             "views.open",
             trigger_id=self.trigger_id,
@@ -49,24 +47,58 @@ class Game:
         self.time_to_vote = (values['time_to_vote']['time_to_vote']
                              ['selected_option']['value'])
 
-    def format_guess_board(self):
-        self.question_block = self.format_block(
-            self.question_block, self.question)
-        self.time_to_guess_block = self.format_block(
-            self.time_to_guess_block, self.time_to_guess_block)
-        self.players_block = self.format_block(
-            self.players_block, '')
+    @property
+    def time_remaining_to_guess(self):
+        return 3
 
-    def show_guess_board(self):
-        guess_board_blocks = [
-            self.divider_block,
+    @property
+    def players(self):
+        return ''
+
+    @property
+    def title_block(self):
+        return self.text_block('*Bluffer game*')
+
+    @property
+    def organizer_block(self):
+        msg = "Set up by <@{}> !".format(self.organizer_id)
+        return self.text_block(msg)
+
+    @property
+    def question_block(self):
+        return self.text_block('{}'.format(self.question))
+
+    @property
+    def guess_button_block(self):
+        return self.button_block('Your guess')
+
+    @property
+    def time_to_guess_block(self):
+        return self.text_block('Time remaining to guess: {}'.format(
+            self.time_remaining_to_guess))
+
+    @property
+    def players_block(self):
+        return self.text_block('Players are: {}'.format(self.players))
+
+    @property
+    def starting_board(self):
+        return [
+            divider_block,
+            self.title_block,
+            divider_block,
+            self.organizer_block,
+            divider_block,
             self.question_block,
+            self.guess_button_block,
             self.time_to_guess_block,
-            self.players_block
+            self.players_block,
+            divider_block
         ]
 
+    def start(self):
         self.slack_client.api_call(
             "chat.postMessage",
             channel=self.channel_id,
             text="",
-            blocks=guess_board_blocks)
+            blocks=self.starting_board)

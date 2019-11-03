@@ -1,0 +1,14 @@
+{
+  "type": "actions",
+  "elements": [
+      {
+          "type": "button",
+          "text": {
+              "type": "plain_text",
+              "text": "{}",
+              "emoji": true
+          },
+          "value": "click_me_123"
+      }
+  ]
+}

@@ -9,21 +9,19 @@ app = Flask(__name__)
 
 BLUFFER_CHANNEL = 'GNE9G4GBT'
 
-with open('bluffer/jsons/messages/board.json') as f:
-    blocks = json.load(f)['blocks']
+with open('bluffer/jsons/blocks/text.json') as f:
+    block = json.load(f)
 
 
 @app.route("/slack/command", methods=["POST"])
 def launch_game():
-    print(request.form['channel_id'])
+    block['text']['text'] = 'Players: '
 
-    post_message = slack_client.api_call(
+    x = slack_client.api_call(
         "chat.postMessage",
         channel=request.form['channel_id'],
         text="",
-        blocks=blocks)
-
-    print(post_message)
+        blocks=[block])
 
     return make_response("", 200)
 

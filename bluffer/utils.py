@@ -25,5 +25,6 @@ def get_modal(file_path, basename):
     return get_json(file_path, 'modals', basename)
 
 
-def get_message(file_path, basename):
-    return get_json(file_path, 'messages', basename)
+def get_block(file_path, basename):
+    return get_json(file_path, 'blocks', basename)
+

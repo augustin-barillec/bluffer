@@ -6,6 +6,17 @@
 		{
 			"type": "section",
 			"text": {
+				"type": "plain_text",
+                "text": "This bluffer game is organized by {} !",
+				"emoji": true
+			}
+		},
+		{
+			"type": "divider"
+		},
+		{
+			"type": "section",
+			"text": {
 				"type": "mrkdwn",
 				"text": "{}"
 			}
@@ -99,6 +110,9 @@
 			},
 			"image_url": "https://storage.googleapis.com/bucket_bluffer/Screenshot%20from%202019-10-26%2014-10-25.png",
 			"alt_text": "image1"
+		},
+		{
+			"type": "divider"
 		}
 	]
 }
