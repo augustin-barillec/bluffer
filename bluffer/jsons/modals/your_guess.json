@@ -1,0 +1,41 @@
+{
+    "type": "modal",
+    "callback_id": "your_guess",
+	"title": {
+		"type": "plain_text",
+		"text": "Bluffer",
+		"emoji": true
+	},
+	"submit": {
+		"type": "plain_text",
+		"text": "Submit",
+		"emoji": true
+	},
+	"close": {
+		"type": "plain_text",
+		"text": "Cancel",
+		"emoji": true
+	},
+	"blocks": [
+		{
+			"type": "section",
+			"text": {
+				"type": "plain_text",
+				"text": "{}"
+			}
+		},
+		{
+			"type": "input",
+            "block_id": "your_guess",
+			"element": {
+				"type": "plain_text_input",
+                "action_id": "your_guess"
+			},
+			"label": {
+				"type": "plain_text",
+				"text": "Your guess",
+				"emoji": true
+			}
+		}
+	]
+}
