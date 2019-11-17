@@ -1,9 +1,9 @@
 {
     "type": "modal",
-    "callback_id": "guess",
+    "callback_id": "",
 	"title": {
 		"type": "plain_text",
-		"text": "Bluffer",
+		"text": "bluffer",
 		"emoji": true
 	},
 	"submit": {

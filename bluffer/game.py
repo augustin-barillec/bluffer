@@ -4,7 +4,8 @@ import random
 from copy import deepcopy
 from datetime import datetime, timedelta
 from bluffer.utils import time_remaining, game_setup_view_template, \
-    guess_view_template, divider_block, text_block, button_block
+    guess_view_template, vote_view_template, \
+    divider_block, text_block, button_block
 
 
 class Game:
@@ -29,46 +30,14 @@ class Game:
         self.start_call = None
 
         self.guessers = []
-        self.voters = set()
+        self.voters = []
 
         self.guesses = dict()
         self.votes = dict()
 
-    def ask_for_setup(self, trigger_id):
-        self.slack_client.api_call(
-            "views.open",
-            trigger_id=trigger_id,
-            view=self.game_setup_view)
-
-    def collect_setup(self, view):
-        values = view['state']['values']
-        self.question = values['question']['question']['value']
-        self.answer = values['answer']['answer']['value']
-        self.time_to_guess = int((values['time_to_guess']['time_to_guess']
-                                  ['selected_option']['value']))*60
-        self.time_to_vote = int((values['time_to_vote']['time_to_vote']
-                                 ['selected_option']['value']))
-
-    @property
-    def time_remaining_to_guess(self):
-        return time_remaining(self.guess_deadline)
-
-    @property
-    def time_remaining_to_vote(self):
-        return time_remaining(self.vote_deadline)
-
-    @property
-    def stage(self):
-        if self.time_remaining_to_guess > 0:
-            return 'guess_stage'
-        elif self.time_remaining_to_vote > 0:
-            return 'vote_stage'
-        else:
-            return 'result_stage'
-
     @property
     def title_block(self):
-        return text_block('*Bluffer game*')
+        return text_block('*bluffer game*')
 
     @property
     def organizer_block(self):
@@ -105,11 +74,17 @@ class Game:
         return text_block('Time remaining to vote: {}'.format(
             self.time_remaining_to_vote))
 
+    def own_proposition_block(self, user_id):
+        index, proposition = self.own_proposition(user_id)
+        text_block('Your guess is: {}) {}'.format(index, proposition))
+
     @staticmethod
-    def users_for_display(users):
-        res = ['<@{}>'.format(u) for u in users]
-        res = ' '.join(res)
-        return res
+    def previous_guess_block(previous_guess):
+        return text_block('Your previous guess: {}'.format(previous_guess))
+
+    @staticmethod
+    def previous_vote_block(previous_vote):
+        return text_block('Your previous vote: {}'.format(previous_vote))
 
     @property
     def guessers_block(self):
@@ -184,6 +159,96 @@ class Game:
         if self.stage == 'result_stage':
             return result_stage_board
 
+    @property
+    def game_setup_view(self):
+        res = game_setup_view_template
+        res['callback_id'] = self.game_setup_view_id
+        return res
+
+    def guess_view(self, previous_guess):
+        res = deepcopy(guess_view_template)
+        res['callback_id'] = self.guess_view_id
+        input_block = deepcopy(res['blocks'][1])
+        res['blocks'] = [self.question_block]
+        if previous_guess is not None:
+            res['blocks'].append(self.previous_guess_block(previous_guess))
+        res['blocks'].append(input_block)
+        return res
+
+    def vote_view(self, user_id, previous_vote):
+        res = deepcopy(vote_view_template)
+        res['callback_id'] = self.vote_view_id
+        input_block_template = res['blocks'][0]
+        option_template = input_block_template['elements']['options'][0]
+        vote_options = []
+        for index, proposition in self.votable_propositions(user_id):
+            vote_option = option_template
+            vote_option['text']['text'] = '{}) {}'.format(index, proposition)
+            vote_option['text']['value'] = '{}'.format(index)
+            vote_options.append(vote_option)
+        input_block = input_block_template
+        input_block['elements']['options'] = vote_options
+        res['blocks'] = []
+        if previous_vote is not None:
+            res['blocks'].append(self.previous_vote_block(previous_vote))
+        res['blocks'] += [self.own_proposition_block(user_id), input_block]
+        return res
+
+    @property
+    def id(self):
+        return '{}#{}#{}#{}'.format(
+            self.team_id, self.channel_id, self.organizer_id, self.trigger_id
+        )
+
+    def build_object_id(self, object_name):
+        return "bluffer#{}#{}".format(object_name, self.id)
+
+    @property
+    def game_setup_view_id(self):
+        return self.build_object_id('game_setup_view')
+
+    @property
+    def guess_button_id(self):
+        return self.build_object_id('guess_button')
+
+    @property
+    def vote_button_id(self):
+        return self.build_object_id('guess_button')
+
+    @property
+    def guess_view_id(self):
+        return self.build_object_id('guess_view')
+
+    @property
+    def vote_view_id(self):
+        return self.build_object_id('vote_view')
+
+    @property
+    def signed_propositions(self):
+        res = list(self.guesses.items()) + [(None, self.answer)]
+        res = random.Random(self.id).shuffle(res)
+        res = [(i+1, author, proposition)
+               for i, (author, proposition) in enumerate(res)]
+        return res
+
+    def votable_propositions(self, user_id):
+        res = []
+        for index, author, proposition in self.signed_propositions:
+            if author != user_id:
+                res.append((index, proposition))
+        return res
+
+    def own_proposition(self, user_id):
+        for index, author, proposition in self.signed_propositions:
+            if author == user_id:
+                return index, proposition
+
+    @staticmethod
+    def users_for_display(users):
+        res = ['<@{}>'.format(u) for u in users]
+        res = ' '.join(res)
+        return res
+
     def start(self):
         self.start_datetime = datetime.now()
         self.guess_deadline = (self.start_datetime
@@ -213,45 +278,11 @@ class Game:
             self.update_board()
             time.sleep(1)
 
-    @property
-    def id(self):
-        return '{}#{}#{}#{}'.format(
-            self.team_id, self.channel_id, self.organizer_id, self.trigger_id
-        )
-
-    def build_object_id(self, object_name):
-        return "bluffer#{}#{}".format(object_name, self.id)
-
-    @property
-    def game_setup_view_id(self):
-        return self.build_object_id('game_setup_view')
-
-    @property
-    def guess_button_id(self):
-        return self.build_object_id('guess_button')
-
-    @property
-    def guess_view_id(self):
-        return self.build_object_id('guess_view')
-
-    @property
-    def game_setup_view(self):
-        res = game_setup_view_template
-        res['callback_id'] = self.game_setup_view_id
-        return res
-
-    @staticmethod
-    def previous_guess_block(previous_guess):
-        return text_block('Your previous guess: {}'.format(previous_guess))
-
-    def guess_view(self, previous_guess=None):
-        res = deepcopy(guess_view_template)
-        if previous_guess is not None:
-            res['blocks'] = [res['blocks'][0]] + res['blocks']
-            res['blocks'][1] = self.previous_guess_block(previous_guess)
-        res['blocks'][0] = self.question_block
-        res['callback_id'] = self.guess_view_id
-        return res
+    def open_game_setup_view(self, trigger_id):
+        self.slack_client.api_call(
+            "views.open",
+            trigger_id=trigger_id,
+            view=self.game_setup_view)
 
     def open_guess_view(self, trigger_id, previous_guess):
         self.slack_client.api_call(
@@ -259,22 +290,44 @@ class Game:
             trigger_id=trigger_id,
             view=self.guess_view(previous_guess))
 
-    def add_or_update_guess(self, user_id, view):
+    def open_vote_view(self, trigger_id, user_id, previous_vote):
+        self.slack_client.api_call(
+            "views.open",
+            trigger_id=trigger_id,
+            view=self.vote_view(user_id, previous_vote))
+
+    def collect_setup(self, view):
         values = view['state']['values']
+        self.question = values['question']['question']['value']
+        self.answer = values['answer']['answer']['value']
+        self.time_to_guess = int((values['time_to_guess']['time_to_guess']
+                                  ['selected_option']['value']))*60
+        self.time_to_vote = int((values['time_to_vote']['time_to_vote']
+                                 ['selected_option']['value']))*60
+
+    def add_or_update_guess(self, user_id, guess_view):
+        values = guess_view['state']['values']
         guess = values['guess']['guess']['value']
         self.guesses[user_id] = guess
 
+    def add_or_update_vote(self, user_id, vote_view):
+        values = vote_view['state']['values']
+        vote = values['vote']['vote']['selected_option']['value']
+        self.votes[user_id] = vote
+
     @property
-    def signed_propositions(self):
-        numbers = list(range(1, len(self.guesses) + 1))
-        shuffle(numbers)
-        res0 = list(self.guesses.items()) + [(None, self.answer)]
-        res = dict()
-        for n, p in zip(numbers, res0):
-            res[n] = p
-        return res
+    def time_remaining_to_guess(self):
+        return time_remaining(self.guess_deadline)
 
-    d
+    @property
+    def time_remaining_to_vote(self):
+        return time_remaining(self.vote_deadline)
 
-
-    def vote_view(self, user_id):
+    @property
+    def stage(self):
+        if self.time_remaining_to_guess > 0:
+            return 'guess_stage'
+        elif self.time_remaining_to_vote > 0:
+            return 'vote_stage'
+        else:
+            return 'result_stage'

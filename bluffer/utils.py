@@ -5,7 +5,7 @@ from copy import deepcopy
 
 
 def time_remaining(deadline):
-    return (deadline - datetime.now()).seconds
+    return int((deadline - datetime.now()).total_seconds())
 
 
 def get_json(file_path, folder_name, basename):
@@ -25,6 +25,7 @@ def get_block(file_path, basename):
 
 game_setup_view_template = get_view(__file__, 'game_setup.json')
 guess_view_template = get_view(__file__, 'guess.json')
+vote_view_template = get_view(__file__, 'vote.json')
 
 divider_block = get_block(__file__, 'divider.json')
 text_block_template = get_block(__file__, 'text.json')

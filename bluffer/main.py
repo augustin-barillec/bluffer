@@ -27,7 +27,7 @@ def command():
             """.format(organizer_id))
     game = Game(team_id, channel_id, organizer_id, trigger_id, slack_client)
     games[organizer_id] = game
-    game.ask_for_setup(trigger_id)
+    game.open_game_setup_view(trigger_id)
     return make_response("", 200)
 
 
@@ -52,15 +52,32 @@ def message_actions():
                 game.guessers.append(user_id)
             game.update_board()
 
+        if view_id.startswith("bluffer#vote_view"):
+            game = get_game(view_id, games)
+            game.add_or_update_vote(user_id, view)
+            if user_id not in game.voters:
+                game.voters.append(user_id)
+            game.update_board()
+
     if message_action["type"] == "block_actions":
         trigger_id = message_action['trigger_id']
         actions_block_id = message_action['actions'][0]['block_id']
+
         if actions_block_id.startswith("bluffer#guess_button"):
             game = get_game(actions_block_id, games)
-            previous_guess = None
-            if user_id in game.guesses:
-                previous_guess = game.guesses[user_id]
-            game.open_guess_view(trigger_id, previous_guess)
+            if user_id != game.organizer_id:
+                previous_guess = None
+                if user_id in game.guesses:
+                    previous_guess = game.guesses[user_id]
+                game.open_guess_view(trigger_id, previous_guess)
+
+        if actions_block_id.startswith("bluffer#vote_button"):
+            game = get_game(actions_block_id, games)
+            if user_id in game.guessers:
+                previous_vote = None
+                if user_id in game.votes:
+                    previous_vote = game.votes[user_id]
+                game.open_vote_view(trigger_id, user_id, previous_vote)
 
     return make_response("", 200)
 
