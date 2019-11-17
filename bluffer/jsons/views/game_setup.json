@@ -92,7 +92,7 @@
 							"text": "15 min",
 							"emoji": true
 						},
-						"value": "1"
+						"value": "15"
 					},
 					{
 						"text": {
@@ -109,7 +109,7 @@
 						"text": "15 min",
 						"emoji": true
 					},
-					"value": "1"
+					"value": "15"
 				}
 			}
 		},
@@ -136,7 +136,7 @@
 							"text": "5 min",
 							"emoji": true
 						},
-						"value": "1"
+						"value": "5"
 					},
 					{
 						"text": {
@@ -153,7 +153,7 @@
 						"text": "5 min",
 						"emoji": true
 					},
-					"value": "1"
+					"value": "5"
 				}
 			}
 		}

@@ -10,12 +10,13 @@ from bluffer.utils import time_remaining, game_setup_view_template, \
 
 class Game:
     def __init__(self, team_id, channel_id, organizer_id,
-                 trigger_id, slack_client):
+                 trigger_id, slack_client, is_test):
         self.team_id = team_id
         self.channel_id = channel_id
         self.organizer_id = organizer_id
         self.trigger_id = trigger_id
         self.slack_client = slack_client
+        self.is_test = is_test
 
         self.question = None
         self.answer = None
@@ -62,7 +63,9 @@ class Game:
 
     @property
     def vote_button_block(self):
-        return button_block('Your vote')
+        res = button_block('Your vote')
+        res['block_id'] = self.vote_button_id
+        return res
 
     @property
     def guess_timer_block(self):
@@ -76,7 +79,7 @@ class Game:
 
     def own_proposition_block(self, user_id):
         index, proposition = self.own_proposition(user_id)
-        text_block('Your guess is: {}) {}'.format(index, proposition))
+        return text_block('Your guess is: {}) {}'.format(index, proposition))
 
     @staticmethod
     def previous_guess_block(previous_guess):
@@ -179,15 +182,15 @@ class Game:
         res = deepcopy(vote_view_template)
         res['callback_id'] = self.vote_view_id
         input_block_template = res['blocks'][0]
-        option_template = input_block_template['elements']['options'][0]
+        option_template = input_block_template['element']['options'][0]
         vote_options = []
         for index, proposition in self.votable_propositions(user_id):
             vote_option = option_template
             vote_option['text']['text'] = '{}) {}'.format(index, proposition)
-            vote_option['text']['value'] = '{}'.format(index)
+            vote_option['value'] = '{}'.format(index)
             vote_options.append(vote_option)
         input_block = input_block_template
-        input_block['elements']['options'] = vote_options
+        input_block['element']['options'] = vote_options
         res['blocks'] = []
         if previous_vote is not None:
             res['blocks'].append(self.previous_vote_block(previous_vote))
@@ -213,7 +216,7 @@ class Game:
 
     @property
     def vote_button_id(self):
-        return self.build_object_id('guess_button')
+        return self.build_object_id('vote_button')
 
     @property
     def guess_view_id(self):
@@ -226,7 +229,7 @@ class Game:
     @property
     def signed_propositions(self):
         res = list(self.guesses.items()) + [(None, self.answer)]
-        res = random.Random(self.id).shuffle(res)
+        random.Random(self.id).shuffle(res)
         res = [(i+1, author, proposition)
                for i, (author, proposition) in enumerate(res)]
         return res
@@ -300,10 +303,14 @@ class Game:
         values = view['state']['values']
         self.question = values['question']['question']['value']
         self.answer = values['answer']['answer']['value']
-        self.time_to_guess = int((values['time_to_guess']['time_to_guess']
-                                  ['selected_option']['value']))*60
-        self.time_to_vote = int((values['time_to_vote']['time_to_vote']
-                                 ['selected_option']['value']))*60
+        if not self.is_test:
+            self.time_to_guess = int((values['time_to_guess']['time_to_guess']
+                                      ['selected_option']['value']))*60
+            self.time_to_vote = int((values['time_to_vote']['time_to_vote']
+                                     ['selected_option']['value']))*60
+        else:
+            self.time_to_guess = 20
+            self.time_to_vote = 20
 
     def add_or_update_guess(self, user_id, guess_view):
         values = guess_view['state']['values']

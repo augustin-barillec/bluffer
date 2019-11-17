@@ -1,9 +1,14 @@
 import os
 import json
+import argparse
 from flask import Flask, request, make_response
 from slackclient import SlackClient
 from bluffer.game import Game
 from bluffer.utils import get_game
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--is_test', type=bool, required=True)
+args = parser.parse_args()
 
 SLACK_BOT_TOKEN = os.environ["SLACK_BOT_TOKEN"]
 slack_client = SlackClient(SLACK_BOT_TOKEN)
@@ -25,7 +30,8 @@ def command():
             A user can only have one game running at a
             time.
             """.format(organizer_id))
-    game = Game(team_id, channel_id, organizer_id, trigger_id, slack_client)
+    game = Game(team_id, channel_id, organizer_id, trigger_id, slack_client,
+                args.is_test)
     games[organizer_id] = game
     game.open_game_setup_view(trigger_id)
     return make_response("", 200)
