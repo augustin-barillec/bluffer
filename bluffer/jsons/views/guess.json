@@ -1,6 +1,6 @@
 {
     "type": "modal",
-    "callback_id": "your_guess",
+    "callback_id": "guess",
 	"title": {
 		"type": "plain_text",
 		"text": "Bluffer",
@@ -26,10 +26,10 @@
 		},
 		{
 			"type": "input",
-            "block_id": "your_guess",
+            "block_id": "guess",
 			"element": {
 				"type": "plain_text_input",
-                "action_id": "your_guess"
+                "action_id": "guess"
 			},
 			"label": {
 				"type": "plain_text",

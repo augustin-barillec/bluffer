@@ -1,0 +1,48 @@
+{
+	"type": "modal",
+	"title": {
+		"type": "plain_text",
+		"text": "bluffer",
+		"emoji": true
+	},
+	"submit": {
+		"type": "plain_text",
+		"text": "Submit",
+		"emoji": true
+	},
+	"close": {
+		"type": "plain_text",
+		"text": "Cancel",
+		"emoji": true
+	},
+	"blocks": [
+		{
+			"type": "input",
+			"block_id": "vote",
+			"label": {
+				"type": "plain_text",
+				"text": "Your vote",
+				"emoji": true
+			},
+			"element": {
+				"type": "static_select",
+				"action_id": "vote",
+				"placeholder": {
+					"type": "plain_text",
+					"text": "Select an item",
+					"emoji": true
+				},
+				"options": [
+					{
+						"text": {
+							"type": "plain_text",
+							"text": "5 min",
+							"emoji": true
+						},
+						"value": "5"
+					}
+				]
+			}
+		}
+	]
+}

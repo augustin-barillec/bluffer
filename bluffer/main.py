@@ -3,6 +3,7 @@ import json
 from flask import Flask, request, make_response
 from slackclient import SlackClient
 from bluffer.game import Game
+from bluffer.utils import get_game
 
 SLACK_BOT_TOKEN = os.environ["SLACK_BOT_TOKEN"]
 slack_client = SlackClient(SLACK_BOT_TOKEN)
@@ -13,12 +14,20 @@ games = dict()
 
 @app.route("/slack/command", methods=["POST"])
 def command():
-    trigger_id = request.form['trigger_id']
+    team_id = request.form['team_id']
     channel_id = request.form['channel_id']
     organizer_id = request.form['user_id']
-    game = Game(channel_id, organizer_id, slack_client)
+    trigger_id = request.form['trigger_id']
+    if organizer_id in games:
+        raise RuntimeError(
+            """
+            A game organized by {} is alreay running.
+            A user can only have one game running at a
+            time.
+            """.format(organizer_id))
+    game = Game(team_id, channel_id, organizer_id, trigger_id, slack_client)
     games[organizer_id] = game
-    game.ask_setup(trigger_id)
+    game.ask_for_setup(trigger_id)
     return make_response("", 200)
 
 
@@ -29,24 +38,29 @@ def message_actions():
 
     if message_action["type"] == "view_submission":
         view = message_action["view"]
-        if view["callback_id"] == "game_setup":
-            organizer_id = user_id
-            game = games[organizer_id]
+        view_id = view["callback_id"]
+
+        if view_id.startswith("bluffer#game_setup_view"):
+            game = get_game(view_id, games)
             game.collect_setup(view)
             game.start()
 
-        if view["callback_id"].startswith("your_guess"):
-            organizer_id = view['callback_id'].split('#')[-1]
-            game = games[organizer_id]
-            game.add_guess(user_id, view)
-            game.players += ' <@{}>'.format(user_id)
-            game.update_starting_board()
+        if view_id.startswith("bluffer#guess_view"):
+            game = get_game(view_id, games)
+            game.add_or_update_guess(user_id, view)
+            if user_id not in game.guessers:
+                game.guessers.append(user_id)
+            game.update_board()
 
     if message_action["type"] == "block_actions":
         trigger_id = message_action['trigger_id']
-        organizer_id = message_action['message']['blocks'][3]['block_id']
-        game = games[organizer_id]
-        game.send_your_guess_modal(trigger_id)
+        actions_block_id = message_action['actions'][0]['block_id']
+        if actions_block_id.startswith("bluffer#guess_button"):
+            game = get_game(actions_block_id, games)
+            previous_guess = None
+            if user_id in game.guesses:
+                previous_guess = game.guesses[user_id]
+            game.open_guess_view(trigger_id, previous_guess)
 
     return make_response("", 200)
 
