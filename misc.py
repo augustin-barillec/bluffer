@@ -22,7 +22,7 @@ def send_time_remaining():
                 channel=BLUFFER_CHANNEL,
                 ts=ask_question["ts"],
                 text="",
-                blocks=[question_block, time_remaining, answer_button_block, players_block]
+                blocks=[question_block, time_remaining, truth_button_block, players_block]
             )
 
         time.sleep(0.001)
@@ -57,7 +57,7 @@ def message_actions():
         slack_client.api_call(
             "dialog.open",
             trigger_id=message_action["trigger_id"],
-            dialog=answer_dialog
+            dialog=truth_dialog
         )
 
     elif message_action["type"] == "dialog_submission":
@@ -76,13 +76,13 @@ def message_actions():
                 channel=BLUFFER_CHANNEL,
                 ts=d['ask_question']["ts"],
                 text="",
-                blocks=[question_block, time_remaining, answer_button_block, players_block]
+                blocks=[question_block, time_remaining, truth_button_block, players_block]
             )
 
             slack_client.api_call(
                 "chat.postEphemeral",
                 channel=BLUFFER_CHANNEL,
-                text='Your answer is: {}'.format(guess),
+                text='Your truth is: {}'.format(guess),
                 user=user_id
 
             )

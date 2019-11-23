@@ -42,7 +42,7 @@
 		},
 		{
 			"type": "input",
-			"block_id": "answer",
+			"block_id": "truth",
 			"label": {
 				"type": "plain_text",
 				"text": "Answer",
@@ -50,7 +50,7 @@
 			},
 			"element": {
 				"type": "plain_text_input",
-				"action_id": "answer"
+				"action_id": "truth"
 			}
 		},
 		{
