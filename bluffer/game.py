@@ -2,9 +2,10 @@ import time
 import threading
 import random
 from copy import deepcopy
+from collections import OrderedDict
 from datetime import datetime, timedelta
-from bluffer.utils import time_remaining, game_setup_view_template, \
-    guess_view_template, vote_view_template, \
+from bluffer.utils import time_remaining, time_for_display,\
+    game_setup_view_template, guess_view_template, vote_view_template, \
     divider_block, text_block, button_block
 
 
@@ -30,11 +31,8 @@ class Game:
 
         self.start_call = None
 
-        self.guessers = []
-        self.voters = []
-
-        self.guesses = dict()
-        self.votes = dict()
+        self.guesses = OrderedDict()
+        self.votes = OrderedDict()
 
     @property
     def title_block(self):
@@ -71,12 +69,12 @@ class Game:
     @property
     def guess_timer_block(self):
         return text_block('Time remaining to guess: {}'.format(
-            self.time_remaining_to_guess))
+            time_for_display(self.time_remaining_to_guess)))
 
     @property
     def vote_timer_block(self):
         return text_block('Time remaining to vote: {}'.format(
-            self.time_remaining_to_vote))
+            time_for_display(self.time_remaining_to_vote)))
 
     def own_proposition_block(self, user_id):
         index, proposition = self.own_proposition(user_id)
@@ -92,12 +90,12 @@ class Game:
 
     @property
     def guessers_block(self):
-        guessers_for_display = self.users_for_display(self.guessers)
+        guessers_for_display = self.user_ids_for_display(self.guessers)
         return text_block('Guessers are: {}'.format(guessers_for_display))
 
     @property
     def voters_block(self):
-        voters_for_display = self.users_for_display(self.voters)
+        voters_for_display = self.user_ids_for_display(self.voters)
         return text_block('Voters are: {}'.format(voters_for_display))
 
     @property
@@ -107,8 +105,8 @@ class Game:
             msg += '\n'
             (user_id, guess_index, guess, vote,
              truth_score, bluff_score, score) = result
-            user = self.user_for_display(user_id)
-            msg += '{} guesses {}){}'.format(user, guess_index, guess)
+            u = self.user_id_for_display(user_id)
+            msg += '{} guesses {}){}'.format(u, guess_index, guess)
             msg += ' and votes for {}.'.format(vote)
             msg += ' Truth score = {}.'.format(truth_score)
             msg += ' Bluff score = {}.'.format(bluff_score)
@@ -264,12 +262,20 @@ class Game:
             if author == user_id:
                 return index, proposition
 
+    @property
+    def guessers(self):
+        return self.guesses.keys()
+
+    @property
+    def voters(self):
+        return self.votes.keys()
+
     @staticmethod
-    def user_for_display(user_id):
+    def user_id_for_display(user_id):
         return '<@{}>'.format(user_id)
 
-    def users_for_display(self, users):
-        res = [self.user_for_display(u) for u in users]
+    def user_ids_for_display(self, user_ids):
+        res = [self.user_id_for_display(u) for u in user_ids]
         res = ' '.join(res)
         return res
 
@@ -300,7 +306,7 @@ class Game:
     def update_board_regularly(self):
         while True:
             self.update_board()
-            time.sleep(1)
+            time.sleep(5)
 
     def open_game_setup_view(self, trigger_id):
         self.slack_client.api_call(
@@ -348,7 +354,7 @@ class Game:
 
     def bluff_score(self, user_id):
         res = 0
-        for voter in self.voters:
+        for voter in self.votes.keys():
             if self.votes[voter] == self.guess_index(user_id):
                 res += 2
         return res
@@ -369,7 +375,7 @@ class Game:
 
     @property
     def results(self):
-        res = [self.result(voter) for voter in self.voters]
+        res = [self.result(voter) for voter in self.votes.keys()]
         res = sorted(res, key=lambda r: -r[-1])
         return res
 
