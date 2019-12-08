@@ -118,11 +118,8 @@ class Game:
         guess_stage_board = [
             divider_block,
             self.title_block,
-            divider_block,
             self.organizer_block,
-            divider_block,
             self.question_block,
-            divider_block,
             self.guess_button_block,
             self.guess_timer_block,
             self.guessers_block,
@@ -132,12 +129,9 @@ class Game:
         vote_stage_board = [
             divider_block,
             self.title_block,
-            divider_block,
             self.organizer_block,
-            divider_block,
             self.question_block,
             self.guessers_block,
-            divider_block,
             self.vote_button_block,
             self.vote_timer_block,
             self.voters_block,
@@ -147,17 +141,13 @@ class Game:
         result_stage_board = [
             divider_block,
             self.title_block,
-            divider_block,
             self.organizer_block,
-            divider_block,
             self.question_block,
-            divider_block,
             self.guessers_block,
-            divider_block,
             self.voters_block,
-            divider_block,
             self.truth_block,
-            self.results_block
+            self.results_block,
+            divider_block,
         ]
 
         if self.stage == 'guess_stage':
