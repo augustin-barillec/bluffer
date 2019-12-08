@@ -10,8 +10,9 @@ def time_remaining(deadline):
 
 def time_for_display(time):
     nb_of_minutes = time // 60
-    nb_of_secondes = time % 60
-    return '{}min {}s'.format(nb_of_minutes, nb_of_secondes)
+    nb_of_seconds = time % 60
+    nb_of_seconds_approx = nb_of_seconds - nb_of_seconds%5
+    return '{}min {}s'.format(nb_of_minutes, nb_of_seconds_approx)
 
 
 def get_json(file_path, folder_name, basename):
@@ -32,7 +33,7 @@ def get_block(file_path, basename):
 game_setup_view_template = get_view(__file__, 'game_setup.json')
 guess_view_template = get_view(__file__, 'guess.json')
 vote_view_template = get_view(__file__, 'vote.json')
-error_view_template = get_view(__file__, 'error.json')
+exception_view_template = get_view(__file__, 'exception.json')
 
 divider_block = get_block(__file__, 'divider.json')
 text_block_template = get_block(__file__, 'text.json')
@@ -72,15 +73,18 @@ def get_game(object_id, games):
     return games[organizer_id]
 
 
-def error_view(msg):
-    res = deepcopy(error_view_template)
+def exception_view(msg):
+    res = deepcopy(exception_view_template)
     res['blocks'][0]['text']['text'] = msg
     return res
 
 
-def open_error_view(slack_client, trigger_id, msg):
+def open_exception_view(slack_client, trigger_id, msg):
     slack_client.api_call(
-        "views.open",
+        'views.open',
         trigger_id=trigger_id,
-        view=error_view(msg))
+        view=exception_view(msg))
 
+
+def exception_view_response(msg):
+    return {'response_action': 'update', 'view': exception_view(msg)}

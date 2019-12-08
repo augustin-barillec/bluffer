@@ -286,18 +286,19 @@ class Game:
         self.vote_deadline = (self.guess_deadline
                               + timedelta(seconds=self.time_to_vote))
         self.start_call = self.slack_client.api_call(
-            "chat.postMessage",
+            'chat.postMessage',
             channel=self.channel_id,
             text="",
             blocks=self.board)
 
         self.thread_update_board_regularly = threading.Thread(
             target=self.update_board_regularly)
+        self.thread_update_board_regularly.daemon = True
         self.thread_update_board_regularly.start()
 
     def update_board(self):
         self.slack_client.api_call(
-            "chat.update",
+            'chat.update',
             channel=self.channel_id,
             ts=self.start_call["ts"],
             text="",
@@ -310,19 +311,19 @@ class Game:
 
     def open_game_setup_view(self, trigger_id):
         self.slack_client.api_call(
-            "views.open",
+            'views.open',
             trigger_id=trigger_id,
             view=self.game_setup_view)
 
     def open_guess_view(self, trigger_id, previous_guess):
         self.slack_client.api_call(
-            "views.open",
+            'views.open',
             trigger_id=trigger_id,
             view=self.guess_view(previous_guess))
 
     def open_vote_view(self, trigger_id, user_id, previous_vote):
         self.slack_client.api_call(
-            "views.open",
+            'views.open',
             trigger_id=trigger_id,
             view=self.vote_view(user_id, previous_vote))
 
@@ -389,9 +390,10 @@ class Game:
 
     @property
     def stage(self):
+        if self.time_to_guess is None:
+            return 'setup_stage'
         if self.time_remaining_to_guess > 0:
             return 'guess_stage'
-        elif self.time_remaining_to_vote > 0:
+        if self.time_remaining_to_vote > 0:
             return 'vote_stage'
-        else:
-            return 'result_stage'
+        return 'result_stage'
