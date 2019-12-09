@@ -25,7 +25,7 @@
 			"type": "section",
 			"text": {
 				"type": "mrkdwn",
-				"text": "Time remaining to guess: {}"
+				"text": "Time left to guess: {}"
 			}
 		},
 		{
@@ -57,7 +57,7 @@
 			"type": "section",
 			"text": {
 				"type": "mrkdwn",
-				"text": "Time remaining to vote: {}"
+				"text": "Time left to vote: {}"
 			}
 		},
 		{

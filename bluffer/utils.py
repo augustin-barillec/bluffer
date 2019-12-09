@@ -4,7 +4,7 @@ from datetime import datetime
 from copy import deepcopy
 
 
-def time_remaining(deadline):
+def time_left(deadline):
     return int((deadline - datetime.now()).total_seconds())
 
 

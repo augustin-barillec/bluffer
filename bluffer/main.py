@@ -10,7 +10,7 @@ from bluffer.utils import get_game, open_exception_view, \
     exception_view_response
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--is_test', type=bool, required=True)
+parser.add_argument('--debug', action='store_true')
 args = parser.parse_args()
 
 SLACK_BOT_TOKEN = os.environ["SLACK_BOT_TOKEN"]
@@ -30,19 +30,19 @@ def command():
     app_conversations = slack_client.api_call(
         "users.conversations",
         types="public_channel, private_channel, mpim, im")['channels']
-
     if channel_id not in [c['id'] for c in app_conversations]:
         msg = 'Please invite me first to this conversation!'
         open_exception_view(slack_client, trigger_id, msg)
         return make_response("", 200)
 
-    if organizer_id in games:
+    if organizer_id in games and games[organizer_id].is_running:
         msg = ('You are the organizer of a game which is sill running. ' 
                'You can only have one game running at a time.')
         open_exception_view(slack_client, trigger_id, msg)
         return make_response("", 200)
+
     game = Game(team_id, channel_id, organizer_id, trigger_id, slack_client,
-                args.is_test)
+                args.debug)
     games[organizer_id] = game
     game.open_game_setup_view(trigger_id)
     return make_response("", 200)
@@ -71,20 +71,16 @@ def message_actions():
                 msg = 'As the organizer of this game, you cannot guess!'
                 open_exception_view(slack_client, trigger_id, msg)
                 return make_response("", 200)
-            previous_guess = None
-            if user_id in game.guessers:
-                previous_guess = game.guesses[user_id]
-            game.open_guess_view(trigger_id, previous_guess)
+            game.open_guess_view(trigger_id, user_id)
+            return make_response("", 200)
 
         if action_block_id.startswith("bluffer#vote_button"):
             if user_id not in game.guessers:
                 msg = 'Only guessers can vote !'
                 open_exception_view(slack_client, trigger_id, msg)
                 return make_response("", 200)
-            previous_vote = None
-            if user_id in game.voters:
-                previous_vote = game.votes[user_id]
-            game.open_vote_view(trigger_id, user_id, previous_vote)
+            game.open_vote_view(trigger_id, user_id)
+            return make_response("", 200)
 
     if message_action["type"] == "view_submission":
         view = message_action["view"]
@@ -102,6 +98,7 @@ def message_actions():
         if view_callback_id.startswith("bluffer#game_setup_view"):
             game.collect_setup(view)
             game.start()
+            return make_response("", 200)
 
         if view_callback_id.startswith("bluffer#guess_view"):
             if game.stage != 'guess_stage':
@@ -111,6 +108,7 @@ def message_actions():
                                 mimetype='application/json')
             game.add_or_update_guess(user_id, view)
             game.update_board()
+            return make_response("", 200)
 
         if view_callback_id.startswith("bluffer#vote_view"):
             if game.stage != 'vote_stage':
@@ -120,6 +118,7 @@ def message_actions():
                                 mimetype='application/json')
             game.add_or_update_vote(user_id, view)
             game.update_board()
+            return make_response("", 200)
 
     return make_response("", 200)
 
@@ -130,7 +129,7 @@ if __name__ == "__main__":
         while True:
             organizer_ids_to_free = []
             for organizer_id in games:
-                if games[organizer_id].stage == 'result_stage':
+                if games[organizer_id].is_over:
                     organizer_ids_to_free.append(organizer_id)
             for organizer_id in organizer_ids_to_free:
                 del games[organizer_id]
