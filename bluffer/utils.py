@@ -11,7 +11,7 @@ def time_left(deadline):
 def time_for_display(time):
     nb_of_minutes = time // 60
     nb_of_seconds = time % 60
-    nb_of_seconds_approx = nb_of_seconds - nb_of_seconds%5
+    nb_of_seconds_approx = nb_of_seconds - nb_of_seconds % 5
     return '{}min {}s'.format(nb_of_minutes, nb_of_seconds_approx)
 
 

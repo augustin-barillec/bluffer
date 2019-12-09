@@ -66,7 +66,7 @@ def message_actions():
             open_exception_view(slack_client, trigger_id, msg)
             return make_response("", 200)
 
-        if action_block_id.startswith("bluffer#guess_button"):
+        if action_block_id.startswith("bluffer#guess_button_block"):
             if user_id == game.organizer_id:
                 msg = 'As the organizer of this game, you cannot guess!'
                 open_exception_view(slack_client, trigger_id, msg)
@@ -74,7 +74,7 @@ def message_actions():
             game.open_guess_view(trigger_id, user_id)
             return make_response("", 200)
 
-        if action_block_id.startswith("bluffer#vote_button"):
+        if action_block_id.startswith("bluffer#vote_button_block"):
             if user_id not in game.guessers:
                 msg = 'Only guessers can vote !'
                 open_exception_view(slack_client, trigger_id, msg)
@@ -106,7 +106,7 @@ def message_actions():
                        'because the guessing deadline has passed!')
                 return Response(json.dumps(exception_view_response(msg)),
                                 mimetype='application/json')
-            game.add_or_update_guess(user_id, view)
+            game.add_guess(user_id, view)
             game.update_board()
             return make_response("", 200)
 
@@ -116,7 +116,7 @@ def message_actions():
                        'because the voting deadline has passed!')
                 return Response(json.dumps(exception_view_response(msg)),
                                 mimetype='application/json')
-            game.add_or_update_vote(user_id, view)
+            game.add_vote(user_id, view)
             game.update_board()
             return make_response("", 200)
 

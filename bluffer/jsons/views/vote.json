@@ -1,6 +1,6 @@
 {
 	"type": "modal",
-	"callback_id": "",
+	"callback_id": "{}",
 	"title": {
 		"type": "plain_text",
 		"text": "bluffer",
@@ -37,10 +37,10 @@
 					{
 						"text": {
 							"type": "plain_text",
-							"text": "",
+							"text": "{}",
 							"emoji": true
 						},
-						"value": ""
+						"value": "{}"
 					}
 				]
 			}
