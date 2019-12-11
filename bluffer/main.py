@@ -85,7 +85,7 @@ def message_actions():
 
         if action_block_id.startswith('bluffer#vote_button_block'):
             if user_id not in game.guessers:
-                msg = 'Only guessers can vote !'
+                msg = 'Only guessers can vote!'
                 open_exception_view(slack_client, trigger_id, msg)
                 return make_response('', 200)
             if user_id in game.voters:
@@ -120,7 +120,7 @@ def message_actions():
                 return Response(json.dumps(exception_view_response(msg)),
                                 mimetype='application/json')
             game.add_guess(user_id, view)
-            game.update_board()
+            game.update()
             return make_response('', 200)
 
         if view_callback_id.startswith('bluffer#vote_view'):
@@ -130,7 +130,7 @@ def message_actions():
                 return Response(json.dumps(exception_view_response(msg)),
                                 mimetype='application/json')
             game.add_vote(user_id, view)
-            game.update_board()
+            game.update()
             return make_response('', 200)
 
     return make_response('', 200)

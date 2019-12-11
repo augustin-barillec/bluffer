@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from bluffer.utils import \
     game_setup_view_template, guess_view_template, vote_view_template, \
     divider_block, text_block, button_block, \
-    time_left, time_for_display, get_channel_non_bot_members
+    time_left, nice_time_display, get_channel_non_bot_members
 
 
 class Game:
@@ -33,13 +33,14 @@ class Game:
         self.start_datetime = None
         self.guess_deadline = None
         self.vote_deadline = None
-        self.thread_update_board_regularly = None
+        self.thread_update_regularly = None
 
         self.start_call = None
 
         self.is_started = False
         self.is_over = False
 
+        self.has_set_vote_deadline = False
         self.has_sent_vote_reminders = False
 
         self.guesses = OrderedDict()
@@ -97,7 +98,7 @@ class Game:
 
     @property
     def truth_block(self):
-        return text_block('Truth: {}){}'.format(
+        return text_block('Truth: {}) {}'.format(
             self.truth_index, self.truth))
 
     @property
@@ -115,12 +116,12 @@ class Game:
     @property
     def guess_timer_block(self):
         return text_block('Time left to guess: {}'.format(
-            time_for_display(self.time_left_to_guess)))
+            nice_time_display(self.time_left_to_guess)))
 
     @property
     def vote_timer_block(self):
         return text_block('Time left to vote: {}'.format(
-            time_for_display(self.time_left_to_vote)))
+            nice_time_display(self.time_left_to_vote)))
 
     def own_proposition_block(self, user_id):
         index, proposition = self.own_proposition(user_id)
@@ -141,7 +142,7 @@ class Game:
         msg = ['Guesses:']
         for index, author, guess in self.indexed_guesses:
             u = self.nice_display(author)
-            msg.append('{} guesses {}){}'.format(u, index, guess))
+            msg.append('{}: {}) {}'.format(u, index, guess))
         msg = '\n'.join(msg)
         return text_block(msg)
 
@@ -151,7 +152,7 @@ class Game:
         for voter in self.voters:
             vote = self.votes[voter]
             u = self.nice_display(voter)
-            msg.append('{} votes for {}'.format(u, vote))
+            msg.append('{}: {}'.format(u, vote))
         msg = '\n'.join(msg)
         return text_block(msg)
 
@@ -160,8 +161,12 @@ class Game:
         msg = ['Scores:']
         for user_id, truth_score, bluff_score, score in self.scores:
             u = self.nice_display(user_id)
-            msg.append('{} scores {} points (truth_score={}, bluff_score={})'
-                       .format(u, score, truth_score, bluff_score))
+            if score == 1:
+                p = 'point'
+            else:
+                p = 'points'
+            msg.append('{}: {} {} (truth_score={}, bluff_score={})'
+                       .format(u, score, p, truth_score, bluff_score))
         msg = '\n'.join(msg)
         return text_block(msg)
 
@@ -197,49 +202,47 @@ class Game:
 
     @property
     def board(self):
-        guess_stage_board = [
-            divider_block,
-            self.title_block,
-            self.organizer_block,
-            self.question_block,
-            self.guess_button_block,
-            self.guess_timer_block,
-            self.guessers_block,
-            divider_block
-        ]
-
-        vote_stage_board = [
-            divider_block,
-            self.title_block,
-            self.organizer_block,
-            self.question_block,
-            self.guessers_block,
-            self.vote_button_block,
-            self.vote_timer_block,
-            self.voters_block,
-            divider_block
-        ]
-
-        result_stage_board = [
-            divider_block,
-            self.title_block,
-            self.organizer_block,
-            self.question_block,
-            self.guessers_block,
-            self.voters_block,
-            self.truth_block,
-            self.indexed_guesses_block,
-            self.votes_block,
-            self.scores_block,
-            divider_block,
-        ]
 
         if self.stage == 'guess_stage':
-            return guess_stage_board
+            board = [
+                divider_block,
+                self.title_block,
+                self.organizer_block,
+                self.question_block,
+                self.guess_button_block,
+                self.guess_timer_block,
+                self.guessers_block,
+                divider_block]
+            return board
+
         if self.stage == 'vote_stage':
-            return vote_stage_board
+            board = [
+                divider_block,
+                self.title_block,
+                self.organizer_block,
+                self.question_block,
+                self.guessers_block,
+                self.vote_button_block,
+                self.vote_timer_block,
+                self.voters_block,
+                divider_block
+            ]
+            return board
+
         if self.stage == 'result_stage':
-            return result_stage_board
+            board = [
+                divider_block,
+                self.title_block,
+                self.organizer_block,
+                self.question_block,
+                self.guessers_block,
+                self.voters_block,
+                self.truth_block,
+                self.indexed_guesses_block,
+                self.votes_block,
+                self.scores_block,
+                divider_block]
+            return board
 
     @property
     def time_left_to_guess(self):
@@ -253,6 +256,8 @@ class Game:
     def stage(self):
         if self.time_left_to_guess > 0 and self.remaining_potential_guessers:
             return 'guess_stage'
+        if not self.has_set_vote_deadline:
+            return 'vote_stage'
         if self.time_left_to_vote > 0 and self.remaining_potential_voters:
             return 'vote_stage'
         return 'result_stage'
@@ -342,42 +347,51 @@ class Game:
         return res
 
     def start(self):
-        self.start_datetime = datetime.now()
-        self.guess_deadline = (self.start_datetime
+        game_start_datetime = datetime.now()
+
+        self.guess_deadline = (game_start_datetime
                                + timedelta(seconds=self.time_to_guess))
-        self.vote_deadline = (self.guess_deadline
-                              + timedelta(seconds=self.time_to_vote))
+
         self.start_call = self.slack_client.api_call(
             'chat.postMessage',
             channel=self.channel_id,
             text='',
             blocks=self.board)
 
-        self.thread_update_board_regularly = threading.Thread(
-            target=self.update_board_regularly)
-        self.thread_update_board_regularly.daemon = True
-        self.thread_update_board_regularly.start()
+        self.thread_update_regularly = threading.Thread(
+            target=self.update_regularly)
+        self.thread_update_regularly.daemon = True
+        self.thread_update_regularly.start()
 
         self.is_started = True
 
-    def update_board(self):
+    def update(self):
         is_vote_stage = self.stage == 'vote_stage'
         is_result_stage = self.stage == 'result_stage'
+
+        if is_vote_stage and not self.has_set_vote_deadline:
+            vote_start_datetime = datetime.now()
+            self.vote_deadline = (vote_start_datetime
+                                  + timedelta(seconds=self.time_to_vote))
+            self.has_set_vote_deadline = True
+
         self.slack_client.api_call(
             'chat.update',
             channel=self.channel_id,
             ts=self.start_call['ts'],
             text='',
             blocks=self.board)
+
         if is_vote_stage and not self.has_sent_vote_reminders:
             self.send_vote_reminders()
             self.has_sent_vote_reminders = True
+
         if is_result_stage:
             self.is_over = True
 
-    def update_board_regularly(self):
+    def update_regularly(self):
         while True:
-            self.update_board()
+            self.update()
             time.sleep(5)
 
     def open_game_setup_view(self, trigger_id):
@@ -425,7 +439,7 @@ class Game:
                                      ['selected_option']['value']))*60
         else:
             self.time_to_guess = 40
-            self.time_to_vote = 40
+            self.time_to_vote = 35
 
     def add_guess(self, user_id, guess_view):
         values = guess_view['state']['values']
