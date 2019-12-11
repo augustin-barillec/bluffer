@@ -426,7 +426,7 @@ class Game:
             self.slack_client.api_call(
                 'chat.postMessage',
                 channel=im_channel_id,
-                text="{} It's time to vote!".format(self.question))
+                text="{} \n It's time to vote!".format(self.question))
 
     def collect_setup(self, view):
         values = view['state']['values']
