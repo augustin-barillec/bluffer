@@ -216,6 +216,11 @@ class Game:
             return board
 
         if self.stage == 'vote_stage':
+
+            if not self.has_set_vote_deadline:
+                self.set_vote_deadline()
+                self.has_set_vote_deadline = True
+
             board = [
                 divider_block,
                 self.title_block,
@@ -243,6 +248,14 @@ class Game:
                 self.scores_block,
                 divider_block]
             return board
+
+    def set_guess_deadline(self):
+        self.guess_deadline = (datetime.now()
+                               + timedelta(seconds=self.time_to_guess))
+
+    def set_vote_deadline(self):
+        self.vote_deadline = (datetime.now()
+                              + timedelta(seconds=self.time_to_vote))
 
     @property
     def time_left_to_guess(self):
@@ -347,10 +360,7 @@ class Game:
         return res
 
     def start(self):
-        game_start_datetime = datetime.now()
-
-        self.guess_deadline = (game_start_datetime
-                               + timedelta(seconds=self.time_to_guess))
+        self.set_guess_deadline()
 
         self.start_call = self.slack_client.api_call(
             'chat.postMessage',
@@ -369,12 +379,6 @@ class Game:
         is_vote_stage = self.stage == 'vote_stage'
         is_result_stage = self.stage == 'result_stage'
 
-        if is_vote_stage and not self.has_set_vote_deadline:
-            vote_start_datetime = datetime.now()
-            self.vote_deadline = (vote_start_datetime
-                                  + timedelta(seconds=self.time_to_vote))
-            self.has_set_vote_deadline = True
-
         self.slack_client.api_call(
             'chat.update',
             channel=self.channel_id,
@@ -386,7 +390,7 @@ class Game:
             self.send_vote_reminders()
             self.has_sent_vote_reminders = True
 
-        if is_result_stage:
+        if is_result_stage and not self.is_over:
             self.is_over = True
 
     def update_regularly(self):
