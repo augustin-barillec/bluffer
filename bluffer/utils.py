@@ -79,6 +79,21 @@ def exception_view(msg):
     return res
 
 
+def get_channel_members(slack_client, channel_id):
+    return slack_client.api_call(
+        'conversations.members',
+        channel=channel_id)['members']
+
+
+def get_channel_non_bot_members(slack_client, channel_id):
+    res = []
+    for m in get_channel_members(slack_client, channel_id):
+        if not slack_client.api_call(
+                'users.info', user=m)['user']['is_bot']:
+            res.append(m)
+    return res
+
+
 def open_exception_view(slack_client, trigger_id, msg):
     slack_client.api_call(
         'views.open',

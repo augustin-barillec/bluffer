@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from bluffer.utils import \
     game_setup_view_template, guess_view_template, vote_view_template, \
     divider_block, text_block, button_block, \
-    time_left, time_for_display
+    time_left, time_for_display, get_channel_non_bot_members
 
 
 class Game:
@@ -19,6 +19,11 @@ class Game:
         self.trigger_id = trigger_id
         self.slack_client = slack_client
         self.debug = debug
+
+        self.potential_guessers = set(get_channel_non_bot_members(
+            self.slack_client, self.channel_id)) - {self.organizer_id}
+        self.im_channel_ids_of_potential_guessers = \
+            self.get_im_channel_ids_of_potential_guessers()
 
         self.question = None
         self.truth = None
@@ -35,15 +40,17 @@ class Game:
         self.is_started = False
         self.is_over = False
 
+        self.has_sent_vote_reminders = False
+
         self.guesses = OrderedDict()
         self.votes = OrderedDict()
 
     @staticmethod
-    def user_id_for_display(user_id):
+    def nice_display(user_id):
         return '<@{}>'.format(user_id)
 
-    def user_ids_for_display(self, user_ids):
-        return ' '.join([self.user_id_for_display(u) for u in user_ids])
+    def nice_list_display(self, user_ids):
+        return ' '.join([self.nice_display(id_) for id_ in user_ids])
 
     @property
     def id(self):
@@ -51,7 +58,7 @@ class Game:
             self.team_id, self.channel_id, self.organizer_id, self.trigger_id)
 
     def build_object_id(self, object_name):
-        return "bluffer#{}#{}".format(object_name, self.id)
+        return 'bluffer#{}#{}'.format(object_name, self.id)
 
     @property
     def game_setup_view_id(self):
@@ -79,7 +86,7 @@ class Game:
 
     @property
     def organizer_block(self):
-        msg = "Set up by <@{}>!".format(self.organizer_id)
+        msg = 'Set up by <@{}>!'.format(self.organizer_id)
         res = text_block(msg)
         res['block_id'] = self.organizer_id
         return text_block(msg)
@@ -119,29 +126,21 @@ class Game:
         index, proposition = self.own_proposition(user_id)
         return text_block('Your guess is: {}) {}'.format(index, proposition))
 
-    @staticmethod
-    def previous_guess_block(previous_guess):
-        return text_block('Your previous guess: {}'.format(previous_guess))
-
-    @staticmethod
-    def previous_vote_block(previous_vote):
-        return text_block('Your previous vote: {}'.format(previous_vote))
-
     @property
     def guessers_block(self):
-        guessers_for_display = self.user_ids_for_display(self.guessers)
+        guessers_for_display = self.nice_list_display(self.guessers)
         return text_block('Guessers: {}'.format(guessers_for_display))
 
     @property
     def voters_block(self):
-        voters_for_display = self.user_ids_for_display(self.voters)
+        voters_for_display = self.nice_list_display(self.voters)
         return text_block('Voters: {}'.format(voters_for_display))
 
     @property
     def indexed_guesses_block(self):
         msg = ['Guesses:']
         for index, author, guess in self.indexed_guesses:
-            u = self.user_id_for_display(author)
+            u = self.nice_display(author)
             msg.append('{} guesses {}){}'.format(u, index, guess))
         msg = '\n'.join(msg)
         return text_block(msg)
@@ -151,7 +150,7 @@ class Game:
         msg = ['Votes:']
         for voter in self.voters:
             vote = self.votes[voter]
-            u = self.user_id_for_display(voter)
+            u = self.nice_display(voter)
             msg.append('{} votes for {}'.format(u, vote))
         msg = '\n'.join(msg)
         return text_block(msg)
@@ -160,7 +159,7 @@ class Game:
     def scores_block(self):
         msg = ['Scores:']
         for user_id, truth_score, bluff_score, score in self.scores:
-            u = self.user_id_for_display(user_id)
+            u = self.nice_display(user_id)
             msg.append('{} scores {} points (truth_score={}, bluff_score={})'
                        .format(u, score, truth_score, bluff_score))
         msg = '\n'.join(msg)
@@ -172,15 +171,12 @@ class Game:
         res['callback_id'] = self.game_setup_view_id
         return res
 
-    def guess_view(self, user_id):
+    @property
+    def guess_view(self):
         res = deepcopy(guess_view_template)
         res['callback_id'] = self.guess_view_id
         input_block = deepcopy(res['blocks'][0])
-        res['blocks'] = [self.question_block]
-        if user_id in self.guessers:
-            previous_guess = self.guesses[user_id]
-            res['blocks'].append(self.previous_guess_block(previous_guess))
-        res['blocks'].append(input_block)
+        res['blocks'] = [self.question_block, input_block]
         return res
 
     def vote_view(self, user_id):
@@ -196,11 +192,7 @@ class Game:
             vote_options.append(vote_option)
         input_block = input_block_template
         input_block['element']['options'] = vote_options
-        res['blocks'] = []
-        if user_id in self.voters:
-            previous_vote = self.votes[user_id]
-            res['blocks'].append(self.previous_vote_block(previous_vote))
-        res['blocks'] += [self.own_proposition_block(user_id), input_block]
+        res['blocks'] = [self.own_proposition_block(user_id), input_block]
         return res
 
     @property
@@ -259,9 +251,9 @@ class Game:
 
     @property
     def stage(self):
-        if self.time_left_to_guess > 0:
+        if self.time_left_to_guess > 0 and self.remaining_potential_guessers:
             return 'guess_stage'
-        if self.time_left_to_vote > 0:
+        if self.time_left_to_vote > 0 and self.remaining_potential_voters:
             return 'vote_stage'
         return 'result_stage'
 
@@ -276,6 +268,18 @@ class Game:
     @property
     def voters(self):
         return self.votes.keys()
+
+    @property
+    def potential_voters(self):
+        return set(self.guessers)
+
+    @property
+    def remaining_potential_guessers(self):
+        return self.potential_guessers - set(self.guessers)
+
+    @property
+    def remaining_potential_voters(self):
+        return self.potential_voters - set(self.voters)
 
     @property
     def signed_propositions(self):
@@ -346,7 +350,7 @@ class Game:
         self.start_call = self.slack_client.api_call(
             'chat.postMessage',
             channel=self.channel_id,
-            text="",
+            text='',
             blocks=self.board)
 
         self.thread_update_board_regularly = threading.Thread(
@@ -357,13 +361,17 @@ class Game:
         self.is_started = True
 
     def update_board(self):
+        is_vote_stage = self.stage == 'vote_stage'
         is_result_stage = self.stage == 'result_stage'
         self.slack_client.api_call(
             'chat.update',
             channel=self.channel_id,
-            ts=self.start_call["ts"],
-            text="",
+            ts=self.start_call['ts'],
+            text='',
             blocks=self.board)
+        if is_vote_stage and not self.has_sent_vote_reminders:
+            self.send_vote_reminders()
+            self.has_sent_vote_reminders = True
         if is_result_stage:
             self.is_over = True
 
@@ -378,17 +386,33 @@ class Game:
             trigger_id=trigger_id,
             view=self.game_setup_view)
 
-    def open_guess_view(self, trigger_id, user_id):
+    def open_guess_view(self, trigger_id):
         self.slack_client.api_call(
             'views.open',
             trigger_id=trigger_id,
-            view=self.guess_view(user_id))
+            view=self.guess_view)
 
     def open_vote_view(self, trigger_id, user_id):
         self.slack_client.api_call(
             'views.open',
             trigger_id=trigger_id,
             view=self.vote_view(user_id))
+
+    def get_im_channel_ids_of_potential_guessers(self):
+        res = dict()
+        im_list_resp = self.slack_client.api_call('im.list')
+        for im in im_list_resp['ims']:
+            if im['user'] in self.potential_guessers:
+                res[im['user']] = im['id']
+        return res
+
+    def send_vote_reminders(self):
+        for u in self.guessers:
+            im_channel_id = self.im_channel_ids_of_potential_guessers[u]
+            self.slack_client.api_call(
+                'chat.postMessage',
+                channel=im_channel_id,
+                text="{} It's time to vote!".format(self.question))
 
     def collect_setup(self, view):
         values = view['state']['values']
