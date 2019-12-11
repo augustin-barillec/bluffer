@@ -8,4 +8,5 @@ setup(
     version='1.0.0',
     install_requires=REQUIREMENTS,
     packages=find_namespace_packages(include=['bluffer*']),
+    package_data={'': ['*.json']}
 )
