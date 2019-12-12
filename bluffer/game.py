@@ -22,8 +22,6 @@ class Game:
 
         self.potential_guessers = set(get_channel_non_bot_members(
             self.slack_client, self.channel_id)) - {self.organizer_id}
-        self.im_channel_ids_of_potential_guessers = \
-            self.get_im_channel_ids_of_potential_guessers()
 
         self.question = None
         self.truth = None
@@ -416,21 +414,13 @@ class Game:
             trigger_id=trigger_id,
             view=self.vote_view(user_id))
 
-    def get_im_channel_ids_of_potential_guessers(self):
-        res = dict()
-        im_list_resp = self.slack_client.api_call('im.list')
-        for im in im_list_resp['ims']:
-            if im['user'] in self.potential_guessers:
-                res[im['user']] = im['id']
-        return res
-
     def send_vote_reminders(self):
         for u in self.guessers:
-            im_channel_id = self.im_channel_ids_of_potential_guessers[u]
             self.slack_client.api_call(
                 'chat.postMessage',
-                channel=im_channel_id,
-                text="{} \n It's time to vote!".format(self.question))
+                channel=u,
+                text="{} \n It's time to vote!".format(self.question),
+                as_user=True)
 
     def collect_setup(self, view):
         values = view['state']['values']
