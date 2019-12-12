@@ -121,9 +121,9 @@ class Game:
         return text_block('Time left to vote: {}'.format(
             nice_time_display(self.time_left_to_vote)))
 
-    def own_proposition_block(self, user_id):
-        index, proposition = self.own_proposition(user_id)
-        return text_block('Your guess is: {}) {}'.format(index, proposition))
+    def own_indexed_guess_block(self, voter):
+        index, guess = self.own_indexed_guess(voter)
+        return text_block('Your guess is: {}) {}'.format(index, guess))
 
     @property
     def guessers_block(self):
@@ -138,8 +138,8 @@ class Game:
     @property
     def indexed_guesses_block(self):
         msg = ['Guesses:']
-        for index, author, guess in self.indexed_guesses:
-            u = self.nice_display(author)
+        for index, guesser, guess in self.indexed_guesses:
+            u = self.nice_display(guesser)
             msg.append('{}: {}) {}'.format(u, index, guess))
         msg = '\n'.join(msg)
         return text_block(msg)
@@ -149,22 +149,22 @@ class Game:
         msg = ['Votes:']
         for voter in self.voters:
             vote = self.votes[voter]
-            u = self.nice_display(voter)
-            msg.append('{}: {}'.format(u, vote))
+            v = self.nice_display(voter)
+            msg.append('{}: {}'.format(v, vote))
         msg = '\n'.join(msg)
         return text_block(msg)
 
     @property
     def scores_block(self):
         msg = ['Scores:']
-        for user_id, truth_score, bluff_score, score in self.scores:
-            u = self.nice_display(user_id)
+        for voter, truth_score, bluff_score, score in self.scores:
+            v = self.nice_display(voter)
             if score == 1:
                 p = 'point'
             else:
                 p = 'points'
             msg.append('{}: {} {} (truth_score={}, bluff_score={})'
-                       .format(u, score, p, truth_score, bluff_score))
+                       .format(v, score, p, truth_score, bluff_score))
         msg = '\n'.join(msg)
         return text_block(msg)
 
@@ -182,20 +182,20 @@ class Game:
         res['blocks'] = [self.question_block, input_block]
         return res
 
-    def vote_view(self, user_id):
+    def vote_view(self, voter):
         res = deepcopy(vote_view_template)
         res['callback_id'] = self.vote_view_id
         input_block_template = res['blocks'][0]
         option_template = input_block_template['element']['options'][0]
         vote_options = []
-        for index, proposition in self.votable_propositions(user_id):
+        for index, guess in self.votable_indexed_guesses(voter):
             vote_option = deepcopy(option_template)
-            vote_option['text']['text'] = '{}) {}'.format(index, proposition)
+            vote_option['text']['text'] = '{}) {}'.format(index, guess)
             vote_option['value'] = '{}'.format(index)
             vote_options.append(vote_option)
         input_block = input_block_template
         input_block['element']['options'] = vote_options
-        res['blocks'] = [self.own_proposition_block(user_id), input_block]
+        res['blocks'] = [self.own_indexed_guess_block(voter), input_block]
         return res
 
     @property
@@ -298,53 +298,60 @@ class Game:
         return self.potential_voters - set(self.voters)
 
     @property
-    def signed_propositions(self):
+    def index_guesser_guess_list(self):
         res = list(self.guesses.items()) + [(None, self.truth)]
         random.Random(self.id).shuffle(res)
-        res = [(i, author, proposition)
-               for i, (author, proposition) in enumerate(res, 1)]
+        res = [(i, guesser, guess)
+               for i, (guesser, guess) in enumerate(res, 1)]
         return res
 
     @property
     def truth_index(self):
-        for index, author, proposition in self.signed_propositions:
-            if author is None:
+        for index, guesser, guess in self.index_guesser_guess_list:
+            if guesser is None:
                 return index
 
-    def guess_index(self, user_id):
-        for index, author, proposition in self.signed_propositions:
-            if author == user_id:
+    def guesser_to_index(self, guesser):
+        for index, guesser_, guess in self.index_guesser_guess_list:
+            if guesser_ == guesser:
                 return index
 
-    def votable_propositions(self, user_id):
+    def index_to_guesser(self, index):
+        for index_, guesser, guess in self.index_guesser_guess_list:
+            if index_ == index:
+                return guesser
+
+    def votable_indexed_guesses(self, voter):
         res = []
-        for index, author, proposition in self.signed_propositions:
-            if author != user_id:
-                res.append((index, proposition))
+        for index, guesser, guess in self.index_guesser_guess_list:
+            if guesser != voter:
+                res.append((index, guess))
         return res
 
-    def own_proposition(self, user_id):
-        for index, author, proposition in self.signed_propositions:
-            if author == user_id:
-                return index, proposition
+    def own_indexed_guess(self, voter):
+        for index, guesser, guess in self.index_guesser_guess_list:
+            if guesser == voter:
+                return index, guess
 
     @property
     def indexed_guesses(self):
-        return [(self.guess_index(guesser), guesser, self.guesses[guesser])
+        return [(self.guesser_to_index(guesser),
+                 guesser,
+                 self.guesses[guesser])
                 for guesser in self.guessers]
 
-    def truth_score(self, user_id):
-        return int(self.votes[user_id] == self.truth_index)
+    def truth_score(self, voter):
+        return int(self.votes[voter] == self.truth_index)
 
-    def bluff_score(self, user_id):
+    def bluff_score(self, voter):
         res = 0
-        for voter in self.votes.keys():
-            if self.votes[voter] == self.guess_index(user_id):
+        for voter_ in self.votes.keys():
+            if self.votes[voter_] == self.guesser_to_index(voter):
                 res += 2
         return res
 
-    def score(self, user_id):
-        return self.truth_score(user_id) + self.bluff_score(user_id)
+    def score(self, voter):
+        return self.truth_score(voter) + self.bluff_score(voter)
 
     @property
     def scores(self):
@@ -408,11 +415,11 @@ class Game:
             trigger_id=trigger_id,
             view=self.guess_view)
 
-    def open_vote_view(self, trigger_id, user_id):
+    def open_vote_view(self, trigger_id, voter):
         self.slack_client.api_call(
             'views.open',
             trigger_id=trigger_id,
-            view=self.vote_view(user_id))
+            view=self.vote_view(voter))
 
     def send_vote_reminders(self):
         for u in self.guessers:
@@ -435,12 +442,12 @@ class Game:
             self.time_to_guess = 40
             self.time_to_vote = 35
 
-    def add_guess(self, user_id, guess_view):
+    def add_guess(self, guesser, guess_view):
         values = guess_view['state']['values']
         guess = values['guess']['guess']['value']
-        self.guesses[user_id] = guess
+        self.guesses[guesser] = guess
 
-    def add_vote(self, user_id, vote_view):
+    def add_vote(self, voter, vote_view):
         values = vote_view['state']['values']
         vote = int(values['vote']['vote']['selected_option']['value'])
-        self.votes[user_id] = vote
+        self.votes[voter] = vote
