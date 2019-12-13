@@ -87,8 +87,11 @@ class Game:
     @property
     def organizer_block(self):
         msg = 'Set up by <@{}>!'.format(self.organizer_id)
-        res = text_block(msg)
-        res['block_id'] = self.organizer_id
+        return text_block(msg)
+
+    @property
+    def set_up_block(self):
+        msg = 'The game is being set up'
         return text_block(msg)
 
     @property
@@ -151,10 +154,14 @@ class Game:
             if result['guesser'] not in self.voters:
                 continue
             voter = self.nice_display(result['guesser'])
-            chosen_guesser = self.nice_display(result['chosen_guesser'])
+            chosen_guesser = result['chosen_guesser']
+            if chosen_guesser is None:
+                chosen_guesser = 'Truth'
+            else:
+                chosen_guesser = self.nice_display(chosen_guesser)
             chosen_guess = result['chosen_guess']
-            msg.append('{}: {}, {}'.format(voter, chosen_guesser,
-                                           chosen_guess))
+            msg.append('{} votes for {}: {}'.format(voter, chosen_guesser,
+                                                    chosen_guess))
         msg = '\n'.join(msg)
         return text_block(msg)
 
@@ -169,7 +176,7 @@ class Game:
             bluff_score = result['bluff_score']
             score = result['score']
             msg.append('{}: {} + 2 x {} = {}'
-                       .format(voter, truth_score, bluff_score, score))
+                       .format(voter, truth_score, bluff_score//2, score))
         msg = '\n'.join(msg)
         return text_block(msg)
 
@@ -206,7 +213,17 @@ class Game:
     @property
     def board(self):
 
+        if self.stage == 'set_up_stage':
+            board = [
+                divider_block,
+                self.title_block,
+                self.organizer_block,
+                self.set_up_block,
+                divider_block]
+            return board
+
         if self.stage == 'guess_stage':
+
             board = [
                 divider_block,
                 self.title_block,
@@ -268,6 +285,8 @@ class Game:
 
     @property
     def stage(self):
+        if self.potential_guessers is None:
+            return 'set_up_stage'
         if self.time_left_to_guess > 0 and self.remaining_potential_guessers:
             return 'guess_stage'
         if not self.has_set_vote_deadline:
@@ -294,10 +313,6 @@ class Game:
 
     @property
     def remaining_potential_guessers(self):
-        if not self.has_set_potential_guessers:
-            self.potential_guessers = set(get_channel_non_bot_members(
-                self.slack_client, self.channel_id)) - {self.organizer_id}
-            self.has_set_potential_guessers = True
         return self.potential_guessers - set(self.guessers)
 
     @property
@@ -402,7 +417,6 @@ class Game:
         self.is_started = True
 
     def update(self):
-        is_vote_stage = self.stage == 'vote_stage'
         is_result_stage = self.stage == 'result_stage'
 
         self.slack_client.api_call(
@@ -412,16 +426,23 @@ class Game:
             text='',
             blocks=self.board)
 
-        if is_vote_stage and not self.has_sent_vote_reminders:
-            self.send_vote_reminders()
-            self.has_sent_vote_reminders = True
-
         if is_result_stage and not self.is_over:
             self.is_over = True
 
     def update_regularly(self):
         while True:
             self.update()
+
+            if not self.has_set_potential_guessers:
+                self.potential_guessers = set(get_channel_non_bot_members(
+                    self.slack_client, self.channel_id)) - {self.organizer_id}
+                self.has_set_potential_guessers = True
+
+            is_vote_stage = self.stage == 'vote_stage'
+            if is_vote_stage and not self.has_sent_vote_reminders:
+                self.send_vote_reminders()
+                self.has_sent_vote_reminders = True
+
             time.sleep(5)
 
     def open_game_setup_view(self, trigger_id):
