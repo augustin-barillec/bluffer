@@ -7,7 +7,9 @@ from datetime import datetime, timedelta
 from bluffer.utils import \
     game_setup_view_template, guess_view_template, vote_view_template, \
     divider_block, text_block, button_block, \
-    time_left, nice_time_display, get_channel_non_bot_members
+    build_game_id, build_slack_object_id, \
+    time_left, nice_time_display, \
+    get_channel_non_bot_members
 
 
 class Game:
@@ -54,31 +56,31 @@ class Game:
 
     @property
     def id(self):
-        return '{}#{}#{}#{}'.format(
+        return build_game_id(
             self.team_id, self.channel_id, self.organizer_id, self.trigger_id)
 
-    def build_object_id(self, object_name):
-        return 'bluffer#{}#{}'.format(object_name, self.id)
+    def build_slack_object_id(self, object_name):
+        return build_slack_object_id(object_name, self.id)
 
     @property
     def game_setup_view_id(self):
-        return self.build_object_id('game_setup_view')
+        return self.build_slack_object_id('game_setup_view')
 
     @property
     def guess_button_block_id(self):
-        return self.build_object_id('guess_button_block')
+        return self.build_slack_object_id('guess_button_block')
 
     @property
     def vote_button_block_id(self):
-        return self.build_object_id('vote_button_block')
+        return self.build_slack_object_id('vote_button_block')
 
     @property
     def guess_view_id(self):
-        return self.build_object_id('guess_view')
+        return self.build_slack_object_id('guess_view')
 
     @property
     def vote_view_id(self):
-        return self.build_object_id('vote_view')
+        return self.build_slack_object_id('vote_view')
 
     @property
     def title_block(self):
@@ -91,8 +93,7 @@ class Game:
 
     @property
     def set_up_block(self):
-        msg = 'The game is being set up'
-        return text_block(msg)
+        return text_block('The game is being set up.')
 
     @property
     def question_block(self):

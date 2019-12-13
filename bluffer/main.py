@@ -6,7 +6,7 @@ import argparse
 from flask import Flask, Response, request, make_response
 from slackclient import SlackClient
 from bluffer.game import Game
-from bluffer.utils import get_game, open_exception_view, \
+from bluffer.utils import build_game_id, get_game, open_exception_view, \
     exception_view_response
 
 parser = argparse.ArgumentParser()
@@ -35,7 +35,12 @@ def command():
         open_exception_view(slack_client, trigger_id, msg)
         return make_response('', 200)
 
-    if organizer_id in games and games[organizer_id].is_running:
+    organizer_id_has_game_running = False
+    for game_id in games:
+        game = games[game_id]
+        if organizer_id == game.organizer_id:
+            organizer_id_has_game_running = True
+    if organizer_id_has_game_running:
         msg = ('You are the organizer of a game which is sill running. '
                'You can only have one game running at a time.')
         open_exception_view(slack_client, trigger_id, msg)
@@ -43,7 +48,8 @@ def command():
 
     game = Game(team_id, channel_id, organizer_id, trigger_id,
                 slack_client, args.debug)
-    games[organizer_id] = game
+    game_id = build_game_id(team_id, channel_id, organizer_id, trigger_id)
+    games[game_id] = game
     game.open_game_setup_view(trigger_id)
     return make_response('', 200)
 
@@ -140,12 +146,12 @@ if __name__ == '__main__':
 
     def erase_dead_games():
         while True:
-            organizer_ids_to_free = []
-            for organizer_id in games:
-                if games[organizer_id].is_over:
-                    organizer_ids_to_free.append(organizer_id)
-            for organizer_id in organizer_ids_to_free:
-                del games[organizer_id]
+            dead_game_ids = []
+            for game_id in games:
+                if games[game_id].is_over:
+                    dead_game_ids.append(game_id)
+            for game_id in dead_game_ids:
+                del games[game_id]
             time.sleep(1)
     thread_erase_dead_games = threading.Thread(target=erase_dead_games)
     thread_erase_dead_games.daemon = True

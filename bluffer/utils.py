@@ -52,25 +52,31 @@ def button_block(message):
     return res
 
 
-def decompose_object_id(object_id):
-    ids = object_id.split('#')
-    return {
-        'object_name': ids[1],
-        'team_id': ids[2],
-        'channel_id': ids[3],
-        'organizer_id': ids[4],
-        'trigger_id': ids[5],
-        'game_id': '#'.join(ids[2:])
-    }
+def build_game_id(team_id, channel_id, organizer_id, trigger_id):
+    return '{}#{}#{}#{}'.format(team_id, channel_id, organizer_id, trigger_id)
 
 
-def get_game(object_id, games):
-    ids = decompose_object_id(object_id)
-    organizer_id = ids['organizer_id']
-    game_id = ids['game_id']
-    if organizer_id not in games or games[organizer_id].id != game_id:
-        return None
-    return games[organizer_id]
+def build_slack_object_id(object_name, game_id):
+    return 'bluffer#{}#{}'.format(object_name, game_id)
+
+
+def slack_object_id_to_game_id(slack_object_id):
+    ids = slack_object_id.split('#')
+    team_id = ids[2]
+    channel_id = ids[3]
+    organizer_id = ids[4]
+    trigger_id = ids[5]
+    return build_game_id(team_id, channel_id, organizer_id, trigger_id)
+
+
+def game_id_to_organizer_id(game_id):
+    ids = game_id.split('#')
+    return ids[2]
+
+
+def get_game(slack_object_id, games):
+    game_id = slack_object_id_to_game_id(slack_object_id)
+    return games.get(game_id)
 
 
 def exception_view(msg):
