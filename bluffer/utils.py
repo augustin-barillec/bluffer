@@ -108,7 +108,8 @@ def get_potential_guessers(slack_client, channel_id):
         c1 = m['id'] in channel_members
         c2 = not m['is_bot']
         c3 = not m['deleted']
-        if c1 and c2 and c3:
+        c4 = m['id'] != 'Truth'
+        if c1 and c2 and c3 and c4:
             res.add(m['id'])
     return res
 

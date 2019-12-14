@@ -42,7 +42,12 @@ class Game:
         self.has_set_potential_guessers = False
         self.has_set_vote_deadline = False
         self.has_sent_vote_reminders = False
-        self._signed_propositions = None
+        self._signed_proposals = None
+        self._results = None
+        self._max_score = None
+        self._winners = None
+        self.results_block = None
+        self.win_block = None
 
         self.guesses = OrderedDict()
         self.votes = OrderedDict()
@@ -97,7 +102,12 @@ class Game:
 
     @property
     def truth_block(self):
-        return text_block('Truth: {}'.format(self.truth))
+        index = self.author_to_index('Truth')
+        return text_block('Truth: {}) {}'.format(index, self.truth))
+
+    @property
+    def computing_result_block(self):
+        return text_block('Computing results :drum_with_drumsticks:')
 
     @property
     def guess_button_block(self):
@@ -122,60 +132,78 @@ class Game:
             nice_time_display(self.time_left_to_vote)))
 
     def own_guess_block(self, voter):
-        return text_block('Your guess is: {}'.format(self.own_guess(voter)))
+        index = self.author_to_index(voter)
+        guess = self.author_to_proposal(voter)
+        return text_block('Your guess is: {}) {}'.format(index, guess))
 
     @property
     def guessers_block(self):
+        if not self.guessers:
+            return text_block('No one has guessed yet.')
         guessers_for_display = self.nice_list_display(self.guessers)
         return text_block('Guessers: {}'.format(guessers_for_display))
 
     @property
     def voters_block(self):
+        if not self.guessers:
+            return text_block('No one has voted yet.')
         voters_for_display = self.nice_list_display(self.voters)
         return text_block('Voters: {}'.format(voters_for_display))
 
     @property
-    def guesses_block(self):
-        msg = ['Guesses:']
-        for result in self.results:
-            guesser = self.nice_display(result['guesser'])
-            guess = result['guess']
-            msg.append('{}: {}'.format(guesser, guess))
+    def anonymous_proposals_block(self):
+        msg = ['Proposals:']
+        for index, author, proposal in self.signed_proposals:
+            msg.append('{}) {}'.format(index, proposal))
         msg = '\n'.join(msg)
         return text_block(msg)
 
-    @property
-    def votes_block(self):
-        msg = ['Votes:']
-        for result in self.results:
-            if result['guesser'] not in self.voters:
-                continue
-            voter = self.nice_display(result['guesser'])
-            chosen_guesser = result['chosen_guesser']
-            if chosen_guesser is None:
-                chosen_guesser = 'Truth'
-            else:
-                chosen_guesser = self.nice_display(chosen_guesser)
-            chosen_guess = result['chosen_guess']
-            msg.append('{} votes for {}: {}'.format(voter, chosen_guesser,
-                                                    chosen_guess))
-        msg = '\n'.join(msg)
-        return text_block(msg)
-
-    @property
-    def scores_block(self):
+    def get_results_block(self):
+        if not self.guessers:
+            return text_block('No one played this game :sob:.')
         msg = ['Scores:']
-        for result in self.results:
-            if result['guesser'] not in self.voters:
-                continue
-            voter = self.nice_display(result['guesser'])
-            truth_score = result['truth_score']
-            bluff_score = result['bluff_score']
-            score = result['score']
-            msg.append('{}: {} + 2 x {} = {}'
-                       .format(voter, truth_score, bluff_score//2, score))
+        for r in deepcopy(self.results):
+            player = r['guesser']
+            index = r['index']
+            guess = r['guess']
+            r_msg = '{} wrote {}) {}'.format(
+                self.nice_display(player), index, guess)
+            if player in self.voters:
+                voted_for = r['chosen_author']
+                if voted_for != 'Truth':
+                    voted_for = self.nice_display(voted_for)
+                score = r['score']
+                if score == 1:
+                    p = 'point'
+                else:
+                    p = 'points'
+                r_msg += ', voted for {} and scores {} {}.'.format(
+                    voted_for, score, p)
+            else:
+                r_msg += ', did not vote and so scores 0 points.'
+            msg.append(r_msg)
         msg = '\n'.join(msg)
         return text_block(msg)
+
+    def get_win_block(self):
+        res = None
+        if not self.voters:
+            msg = 'No one voted :sob:.'
+            res = text_block(msg)
+        if len(self.winners) == len(self.voters):
+            msg = "Well, it's a draw between the voters! :scales:"
+            res = text_block(msg)
+        if len(self.winners) == 1:
+            w = self.nice_display(self.winners[0])
+            msg = "And the winner is {}! :first_place_medal:".format(w)
+            res = text_block(msg)
+        if len(self.winners) > 1:
+            ws = [self.nice_display(w) for w in self.winners]
+            msg_aux = ','.join(ws[:-1])
+            msg_aux += ' and {}'.format(ws[-1])
+            msg = "And the winners are {}! :clap:".format(msg_aux)
+            res = text_block(msg)
+        return res
 
     @property
     def game_setup_view(self):
@@ -197,9 +225,9 @@ class Game:
         input_block_template = res['blocks'][0]
         option_template = input_block_template['element']['options'][0]
         vote_options = []
-        for index, guess in self.votable_propositions(voter):
+        for index, guess in self.votable_proposals(voter):
             vote_option = deepcopy(option_template)
-            vote_option['text']['text'] = '{}'.format(guess)
+            vote_option['text']['text'] = '{}) {}'.format(index, guess)
             vote_option['value'] = '{}'.format(index)
             vote_options.append(vote_option)
         input_block = input_block_template
@@ -236,11 +264,20 @@ class Game:
                 self.set_vote_deadline()
                 self.has_set_vote_deadline = True
 
+            if not self.guessers:
+                board = [
+                    divider_block,
+                    self.title_block,
+                    self.question_block,
+                    divider_block
+                ]
+                return board
             board = [
                 divider_block,
                 self.title_block,
                 self.question_block,
                 self.guessers_block,
+                self.anonymous_proposals_block,
                 self.vote_button_block,
                 self.vote_timer_block,
                 self.voters_block,
@@ -248,15 +285,32 @@ class Game:
             ]
             return board
 
+        if self.stage == 'computing_result_stage':
+            board = [
+                divider_block,
+                self.title_block,
+                self.question_block,
+                self.computing_result_block,
+                divider_block
+            ]
+            return board
+
         if self.stage == 'result_stage':
+            if not self.guessers:
+                board = [
+                    divider_block,
+                    self.title_block,
+                    self.question_block,
+                    self.results_block,
+                    divider_block]
+                return board
             board = [
                 divider_block,
                 self.title_block,
                 self.question_block,
                 self.truth_block,
-                self.guesses_block,
-                self.votes_block,
-                self.scores_block,
+                self.results_block,
+                self.win_block,
                 divider_block]
             return board
 
@@ -286,6 +340,8 @@ class Game:
             return 'vote_stage'
         if self.time_left_to_vote > 0 and self.remaining_potential_voters:
             return 'vote_stage'
+        if self.results_block is None or self.win_block is None:
+            return 'computing_result_stage'
         return 'result_stage'
 
     @property
@@ -313,84 +369,102 @@ class Game:
         return self.potential_voters - set(self.voters)
 
     @property
-    def signed_propositions(self):
-        if self._signed_propositions is None:
-            res = list(self.guesses.items()) + [(None, self.truth)]
-            random.Random(self.id).shuffle(res)
-            res = [(index, author, proposition)
-                   for index, (author, proposition) in enumerate(res, 1)]
-            self._signed_propositions = res
-        return self._signed_propositions
+    def signed_proposals(self):
+        if self._signed_proposals is None:
+            res = list(self.guesses.items()) + [('Truth', self.truth)]
+            random.shuffle(res)
+            res = [(index, author, proposal)
+                   for index, (author, proposal) in enumerate(res, 1)]
+            self._signed_proposals = res
+        return self._signed_proposals
 
-    def own_guess(self, voter):
-        for index, author, proposition in self.signed_propositions:
-            if author == voter:
-                return proposition
-
-    def votable_propositions(self, voter):
-        res = []
-        for index, author, proposition in self.signed_propositions:
-            if author != voter:
-                res.append((index, proposition))
-        return res
-
-    @property
-    def truth_index(self):
-        for index, author, proposition in self.signed_propositions:
-            if author is None:
-                return index
-
-    def guesser_to_index(self, guesser):
-        for index, author, proposition in self.signed_propositions:
-            if author == guesser:
-                return index
-
-    def index_to_guesser(self, index):
-        for index_, author, proposition in self.signed_propositions:
+    def index_to_author(self, index):
+        for index_, author, proposal in self.signed_proposals:
             if index_ == index:
                 return author
 
-    def index_to_guess(self, index):
-        for index_, author, proposition in self.signed_propositions:
+    def author_to_index(self, author):
+        for index, author_, proposal in self.signed_proposals:
+            if author == author_:
+                return index
+
+    def index_to_proposal(self, index):
+        for index_, author, proposal in self.signed_proposals:
             if index_ == index:
-                return proposition
+                return proposal
+
+    def author_to_proposal(self, author):
+        for index_, author_, proposal in self.signed_proposals:
+            if author_ == author:
+                return proposal
+
+    def votable_proposals(self, voter):
+        res = []
+        for index, author, proposal in self.signed_proposals:
+            if author != voter:
+                res.append((index, proposal))
+        return res
 
     def truth_score(self, voter):
-        return int(self.votes[voter] == self.truth_index)
+        return int(self.votes[voter] == self.author_to_index('Truth'))
 
     def bluff_score(self, voter):
         res = 0
         for voter_ in self.votes.keys():
-            if self.votes[voter_] == self.guesser_to_index(voter):
+            voter_index = self.author_to_index(voter)
+            if self.votes[voter_] == voter_index:
                 res += 2
         return res
 
-    def score(self, voter):
-        return self.truth_score(voter) + self.bluff_score(voter)
-
     @property
     def results(self):
-        results = []
-        for index, author, proposition in self.signed_propositions:
-            result = dict()
-            if author is None:
-                continue
-            result['guesser'] = author
-            result['guess'] = proposition
-            if author in self.voters:
+        if self._results is None:
+            results = []
+            for index, author, proposal in self.signed_proposals:
+                r = dict()
+                if author == 'Truth':
+                    continue
+                r['index'] = index
+                r['guesser'] = author
+                r['guess'] = proposal
+                if author not in self.voters:
+                    r['score'] = 0
+                    results.append(r)
+                    continue
                 vote_index = self.votes[author]
-                result['chosen_guesser'] = self.index_to_guesser(vote_index)
-                result['chosen_guess'] = self.index_to_guess(vote_index)
-                result['truth_score'] = self.truth_score(author)
-                result['bluff_score'] = self.bluff_score(author)
-                result['score'] = self.score(author)
-            results.append(result)
+                r['vote_index'] = vote_index
+                r['chosen_author'] = self.index_to_author(vote_index)
+                r['chosen_proposal'] = self.index_to_proposal(vote_index)
+                r['truth_score'] = self.truth_score(author)
+                r['bluff_score'] = self.bluff_score(author)
+                r['score'] = r['truth_score'] + r['bluff_score']
+                results.append(r)
 
-        def sort_key(r):
-            return -r.get('score', -1), r['guesser']
+            def sort_key(r_):
+                return 'vote_index' not in r_, -r_['score'], r_['guesser']
+            results.sort(key=lambda r_: sort_key(r_))
 
-        results.sort(key=lambda r: sort_key(r))
-        return results
+            self._results = results
+        return self._results
+
+    @property
+    def max_score(self):
+        if self._max_score is None:
+            scores = [r['score'] for r in self.results if 'score' in r]
+            res = scores[0]
+            self._max_score = res
+        return self._max_score
+
+    @property
+    def winners(self):
+        if self._winners is None:
+            max_score = self.max_score
+            res = []
+            for r in self.results:
+                if r['score'] == max_score:
+                    res.append(r['guesser'])
+            self._winners = res
+        return self._winners
 
     def start(self):
         self.set_guess_deadline()
@@ -431,6 +505,13 @@ class Game:
                 self.send_vote_reminders()
                 self.has_sent_vote_reminders = True
 
+            if self.stage == 'computing_result_stage':
+                self.results_block = self.get_results_block()
+                if self.guessers:
+                    self.win_block = self.get_win_block()
+                else:
+                    self.win_block = ''
+
             self.update()
 
             time.sleep(5)
@@ -455,11 +536,11 @@ class Game:
 
     def send_vote_reminders(self):
         for u in self.guessers:
-            msg = ("Hey {}, you have {} left to vote in the bluffer game "
-                   "organized by {}."
+            msg = ("Hey {}, you can now vote in the bluffer game organized "
+                   "by {}. You have {} left. Will you find the truth ? :mag:"
                    .format(self.nice_display(u),
-                           nice_time_display(self.time_to_vote),
-                           self.nice_display(self.organizer_id)))
+                           self.nice_display(self.organizer_id),
+                           nice_time_display(self.time_to_vote)))
             self.slack_client.api_call(
                 'chat.postEphemeral',
                 channel=self.channel_id,

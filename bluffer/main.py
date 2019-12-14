@@ -38,7 +38,7 @@ def command():
     organizer_id_has_game_running = False
     for game_id in games:
         game = games[game_id]
-        if organizer_id == game.organizer_id:
+        if organizer_id == game.organizer_id and game.is_running:
             organizer_id_has_game_running = True
     if organizer_id_has_game_running:
         msg = ('You are the organizer of a game which is sill running. '
@@ -75,6 +75,11 @@ def message_actions():
         if action_block_id.startswith('bluffer#guess_button_block'):
             if user_id == game.organizer_id:
                 msg = 'As the organizer of this game, you cannot guess!'
+                open_exception_view(slack_client, trigger_id, msg)
+                return make_response('', 200)
+            if user_id == 'Truth':
+                msg = ("You cannot play bluffer because your slack user_id is "
+                       "'Truth', which is a reserved word for the game.")
                 open_exception_view(slack_client, trigger_id, msg)
                 return make_response('', 200)
             if user_id not in game.potential_guessers:
