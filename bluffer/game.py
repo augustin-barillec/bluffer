@@ -9,7 +9,7 @@ from bluffer.utils import \
     divider_block, text_block, button_block, \
     build_game_id, build_slack_object_id, \
     time_left, nice_time_display, \
-    get_channel_non_bot_members
+    get_potential_guessers
 
 
 class Game:
@@ -84,11 +84,7 @@ class Game:
 
     @property
     def title_block(self):
-        return text_block('*bluffer game*')
-
-    @property
-    def organizer_block(self):
-        msg = 'Set up by <@{}>!'.format(self.organizer_id)
+        msg = 'Game set up by <@{}>!'.format(self.organizer_id)
         return text_block(msg)
 
     @property
@@ -218,7 +214,6 @@ class Game:
             board = [
                 divider_block,
                 self.title_block,
-                self.organizer_block,
                 self.set_up_block,
                 divider_block]
             return board
@@ -228,7 +223,6 @@ class Game:
             board = [
                 divider_block,
                 self.title_block,
-                self.organizer_block,
                 self.question_block,
                 self.guess_button_block,
                 self.guess_timer_block,
@@ -245,7 +239,6 @@ class Game:
             board = [
                 divider_block,
                 self.title_block,
-                self.organizer_block,
                 self.question_block,
                 self.guessers_block,
                 self.vote_button_block,
@@ -259,7 +252,6 @@ class Game:
             board = [
                 divider_block,
                 self.title_block,
-                self.organizer_block,
                 self.question_block,
                 self.truth_block,
                 self.guesses_block,
@@ -385,18 +377,17 @@ class Game:
                 continue
             result['guesser'] = author
             result['guess'] = proposition
-            if author not in self.voters:
-                continue
-            vote_index = self.votes[author]
-            result['chosen_guesser'] = self.index_to_guesser(vote_index)
-            result['chosen_guess'] = self.index_to_guess(vote_index)
-            result['truth_score'] = self.truth_score(author)
-            result['bluff_score'] = self.bluff_score(author)
-            result['score'] = self.score(author)
+            if author in self.voters:
+                vote_index = self.votes[author]
+                result['chosen_guesser'] = self.index_to_guesser(vote_index)
+                result['chosen_guess'] = self.index_to_guess(vote_index)
+                result['truth_score'] = self.truth_score(author)
+                result['bluff_score'] = self.bluff_score(author)
+                result['score'] = self.score(author)
             results.append(result)
 
         def sort_key(r):
-            return 'score' not in r, -r['score'], r['guesser']
+            return -r.get('score', -1), r['guesser']
 
         results.sort(key=lambda r: sort_key(r))
         return results
@@ -407,7 +398,6 @@ class Game:
         self.start_call = self.slack_client.api_call(
             'chat.postMessage',
             channel=self.channel_id,
-            text='',
             blocks=self.board)
 
         self.thread_update_regularly = threading.Thread(
@@ -424,7 +414,6 @@ class Game:
             'chat.update',
             channel=self.channel_id,
             ts=self.start_call['ts'],
-            text='',
             blocks=self.board)
 
         if is_result_stage and not self.is_over:
@@ -432,17 +421,17 @@ class Game:
 
     def update_regularly(self):
         while True:
-            self.update()
-
             if not self.has_set_potential_guessers:
-                self.potential_guessers = set(get_channel_non_bot_members(
-                    self.slack_client, self.channel_id)) - {self.organizer_id}
+                self.potential_guessers = get_potential_guessers(
+                    self.slack_client, self.channel_id) - {self.organizer_id}
                 self.has_set_potential_guessers = True
 
             is_vote_stage = self.stage == 'vote_stage'
             if is_vote_stage and not self.has_sent_vote_reminders:
                 self.send_vote_reminders()
                 self.has_sent_vote_reminders = True
+
+            self.update()
 
             time.sleep(5)
 
@@ -466,11 +455,16 @@ class Game:
 
     def send_vote_reminders(self):
         for u in self.guessers:
+            msg = ("Hey {}, you have {} left to vote in the bluffer game "
+                   "organized by {}."
+                   .format(self.nice_display(u),
+                           nice_time_display(self.time_to_vote),
+                           self.nice_display(self.organizer_id)))
             self.slack_client.api_call(
-                'chat.postMessage',
-                channel=u,
-                text="{} \n It's time to vote!".format(self.question),
-                as_user=True)
+                'chat.postEphemeral',
+                channel=self.channel_id,
+                user=u,
+                text=msg)
 
     def collect_setup(self, view):
         values = view['state']['values']

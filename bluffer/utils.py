@@ -8,9 +8,14 @@ def time_left(deadline):
     return int((deadline - datetime.now()).total_seconds())
 
 
-def nice_time_display(time):
+def min_sec(time):
     nb_of_minutes = time // 60
     nb_of_seconds = time % 60
+    return nb_of_minutes, nb_of_seconds
+
+
+def nice_time_display(time):
+    nb_of_minutes, nb_of_seconds = min_sec(time)
     nb_of_seconds_approx = nb_of_seconds - nb_of_seconds % 5
     return '{}min {}s'.format(nb_of_minutes, nb_of_seconds_approx)
 
@@ -91,12 +96,20 @@ def get_channel_members(slack_client, channel_id):
         channel=channel_id)['members']
 
 
-def get_channel_non_bot_members(slack_client, channel_id):
-    res = []
-    for m in get_channel_members(slack_client, channel_id):
-        if not slack_client.api_call(
-                'users.info', user=m)['user']['is_bot']:
-            res.append(m)
+def get_workspace_members(slack_client):
+    return slack_client.api_call('users.list')['members']
+
+
+def get_potential_guessers(slack_client, channel_id):
+    res = set()
+    channel_members = get_channel_members(slack_client, channel_id)
+    workspace_members = get_workspace_members(slack_client)
+    for m in workspace_members:
+        c1 = m['id'] in channel_members
+        c2 = not m['is_bot']
+        c3 = not m['deleted']
+        if c1 and c2 and c3:
+            res.add(m['id'])
     return res
 
 

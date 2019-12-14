@@ -68,7 +68,7 @@ def message_actions():
 
         game = get_game(action_block_id, games)
         if game is None:
-            msg = 'This game is not running anymore!'
+            msg = 'This game is dead!'
             open_exception_view(slack_client, trigger_id, msg)
             return make_response('', 200)
 
@@ -110,9 +110,10 @@ def message_actions():
 
         game = get_game(view_callback_id, games)
         if game is None:
-            msg = 'This game is not running anymore!'
+            msg = 'This game is dead!'
             return Response(json.dumps(exception_view_response(msg)),
-                            mimetype='application/json')
+                            mimetype='application/json',
+                            status=200)
 
         if view_callback_id.startswith('bluffer#game_setup_view'):
             game.collect_setup(view)
@@ -124,7 +125,8 @@ def message_actions():
                 msg = ('Your guess will not be taken into account '
                        'because the guessing deadline has passed!')
                 return Response(json.dumps(exception_view_response(msg)),
-                                mimetype='application/json')
+                                mimetype='application/json',
+                                status=200)
             game.add_guess(user_id, view)
             game.update()
             return make_response('', 200)
@@ -134,7 +136,8 @@ def message_actions():
                 msg = ('Your vote will not be taken into account '
                        'because the voting deadline has passed!')
                 return Response(json.dumps(exception_view_response(msg)),
-                                mimetype='application/json')
+                                mimetype='application/json',
+                                status=200)
             game.add_vote(user_id, view)
             game.update()
             return make_response('', 200)
