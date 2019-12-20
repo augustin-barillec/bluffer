@@ -1,6 +1,6 @@
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from copy import deepcopy
 
 
@@ -58,25 +58,16 @@ def button_block(message):
 
 
 def build_game_id(team_id, channel_id, organizer_id, trigger_id):
-    return '{}#{}#{}#{}'.format(team_id, channel_id, organizer_id, trigger_id)
+    return '{}&{}&{}&{}'.format(team_id, channel_id, organizer_id, trigger_id)
 
 
-def build_slack_object_id(object_name, game_id):
-    return 'bluffer#{}#{}'.format(object_name, game_id)
+def build_slack_object_id(app_id, object_name, game_id):
+    return '{}#{}#{}'.format(app_id, object_name, game_id)
 
 
 def slack_object_id_to_game_id(slack_object_id):
     ids = slack_object_id.split('#')
-    team_id = ids[2]
-    channel_id = ids[3]
-    organizer_id = ids[4]
-    trigger_id = ids[5]
-    return build_game_id(team_id, channel_id, organizer_id, trigger_id)
-
-
-def game_id_to_organizer_id(game_id):
-    ids = game_id.split('#')
-    return ids[2]
+    return ids[-1]
 
 
 def get_game(slack_object_id, games):
@@ -114,12 +105,58 @@ def get_potential_guessers(slack_client, channel_id):
     return res
 
 
-def open_exception_view(slack_client, trigger_id, msg):
+def open_view(slack_client, trigger_id, view):
     slack_client.api_call(
         'views.open',
         trigger_id=trigger_id,
-        view=exception_view(msg))
+        view=view)
+
+
+def open_exception_view(slack_client, trigger_id, msg):
+    open_view(slack_client, trigger_id, exception_view(msg))
 
 
 def exception_view_response(msg):
     return {'response_action': 'update', 'view': exception_view(msg)}
+
+
+def game_setup_view(game_id):
+    res = deepcopy(game_setup_view_template)
+    res['callback_id'] = game_id
+    return res
+
+
+def open_game_setup_view(slack_client, trigger_id, game_id):
+    open_view(slack_client, trigger_id, game_setup_view(game_id))
+
+
+def collect_game_setup(game_setup_view, debug):
+    values = game_setup_view['state']['values']
+    question = values['question']['question']['value']
+    truth = values['truth']['truth']['value']
+    if not debug:
+        time_to_guess = int((values['time_to_guess']['time_to_guess']
+                                   ['selected_option']['value']))*60
+        time_to_vote = int((values['time_to_vote']['time_to_vote']
+                                  ['selected_option']['value']))*60
+    else:
+        time_to_guess = 40
+        time_to_vote = 35
+    return question, truth, time_to_guess, time_to_vote
+
+
+def game_id_to_ids(game_id):
+    return game_id.split('&')
+
+
+def game_id_to_channel_id(game_id):
+    return game_id_to_ids(game_id)[1]
+
+
+def game_id_to_organizer_id(game_id):
+    return game_id_to_ids(game_id)[2]
+
+
+def compute_deadline(time_left):
+    return datetime.now() + timedelta(seconds=time_left)
+

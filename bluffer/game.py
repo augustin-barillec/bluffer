@@ -4,53 +4,99 @@ import random
 from copy import deepcopy
 from collections import OrderedDict
 from datetime import datetime, timedelta
-from bluffer.utils import \
-    game_setup_view_template, guess_view_template, vote_view_template, \
-    divider_block, text_block, button_block, \
-    build_game_id, build_slack_object_id, \
-    time_left, nice_time_display, \
-    get_potential_guessers
+from bluffer.utils import *
 
 
 class Game:
-    def __init__(self, team_id, channel_id, organizer_id,
-                 trigger_id, slack_client, debug):
-        self.team_id = team_id
-        self.channel_id = channel_id
-        self.organizer_id = organizer_id
-        self.trigger_id = trigger_id
+    def __init__(self, question, truth,
+                 time_to_guess, time_to_vote,
+                 game_id, slack_client):
+
+        self.question = question
+        self.truth = truth
+        self.time_to_guess = time_to_guess
+        self.time_to_vote = time_to_vote
+        self.game_id = game_id
         self.slack_client = slack_client
-        self.debug = debug
 
-        self.potential_guessers = None
-
-        self.question = None
-        self.truth = None
-        self.time_to_guess = None
-        self.time_to_vote = None
-
-        self.start_datetime = None
-        self.guess_deadline = None
-        self.vote_deadline = None
-        self.thread_update_regularly = None
-
-        self.start_call = None
-
-        self.is_started = False
-        self.is_over = False
-
-        self.has_set_potential_guessers = False
-        self.has_set_vote_deadline = False
-        self.has_sent_vote_reminders = False
-        self._signed_proposals = None
-        self._results = None
-        self._max_score = None
-        self._winners = None
-        self.results_block = None
-        self.win_block = None
+        self.channel_id = game_id_to_channel_id(game_id)
+        self.organizer_id = game_id_to_organizer_id(game_id)
 
         self.guesses = OrderedDict()
         self.votes = OrderedDict()
+
+        self.thread_update = threading.Thread(target=self.update)
+        self.thread_update.daemon = True
+        self.thread_update.start()
+
+        self.potential_guessers = None
+        self.guess_deadline = None
+        self.start_call = None
+        self.is_started = False
+
+        self.vote_deadline = None
+        self.has_sent_vote_reminders = False
+
+        self.results_block = None
+        self.win_block = None
+
+
+    def update(self):
+        while True:
+            if self.stage == 'game_setup_stage':
+                self.potential_guessers = get_potential_guessers(self.channel_id,
+                                                                 self.organizer_id)
+                self.guess_deadline = compute_deadline(self.time_to_guess)
+                self.start_call = self.slack_client.api_call(
+                    'chat.postMessage',
+                    channel=self.channel_id,
+                    blocks=self.board)
+                self.is_started = True
+
+            if self.stage == 'guess_stage':
+                self.update_board()
+
+            if self.stage == 'vote_stage':
+                if self.vote_deadline is None:
+                    self.vote_deadline = compute_deadline(self.time_to_vote)
+                if self.has_sent_vote_reminders:
+                    self.send_vote_reminders()
+                    self.has_sent_vote_reminders = True
+                self.update_board()
+
+            if self.stage == 'computing_results_stage':
+                if self.results_block is None:
+                    self.results_block = self.compute_results_block()
+                if self.win_block is None:
+                    self.win_block = self.compute_win_block()
+                self.update_board()
+
+            if self.stage == 'result':
+                self.update_board()
+                self.is_over = True
+
+            if self.stage == 'over':
+                pass
+
+            time.sleep(5)
+
+    def stage(self):
+        if not self.is_started:
+            return 'game_setup_stage'
+        if self.time_left_to_guess > 0 and self.remaining_potential_guessers:
+            return 'guess_stage'
+        if self.time_left_to_vote > 0 and self.remaining_voters:
+            return 'vote_stage'
+        if self.results_block is None:
+            return 'computing_result_board'
+        return 'result_stage'
+
+    def update_board(self):
+        self.slack_client.api_call(
+            'chat.update',
+            channel=self.channel_id,
+            ts=self.start_call['ts'],
+            blocks=self.board)
 
     @staticmethod
     def nice_display(user_id):
@@ -481,17 +527,13 @@ class Game:
 
         self.is_started = True
 
-    def update(self):
-        is_result_stage = self.stage == 'result_stage'
-
+    def update_board(self):
         self.slack_client.api_call(
             'chat.update',
             channel=self.channel_id,
             ts=self.start_call['ts'],
             blocks=self.board)
 
-        if is_result_stage and not self.is_over:
-            self.is_over = True
 
     def update_regularly(self):
         while True:
