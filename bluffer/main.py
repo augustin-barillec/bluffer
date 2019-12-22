@@ -1,6 +1,8 @@
+import os
 import time
 import threading
 import argparse
+import json
 from flask import Flask, Response, request, make_response
 from slackclient import SlackClient
 from bluffer.game import Game
@@ -18,18 +20,18 @@ APP_ID = os.environ['APP_ID']
 
 app = Flask(__name__)
 
-games = dict()
+GAMES = dict()
 
 
 def erase_dead_games():
     while True:
         dead_game_ids = []
-        for game_id in games:
-            if games[game_id].is_over:
+        for game_id in GAMES:
+            if GAMES[game_id].is_over:
                 dead_game_ids.append(game_id)
         for game_id in dead_game_ids:
-            games[game_id].thread_update.join()
-            del games[game_id]
+            GAMES[game_id].thread_update.join()
+            del GAMES[game_id]
         time.sleep(1)
 
 
@@ -47,10 +49,10 @@ def command():
     organizer_id = request.form['user_id']
     trigger_id = request.form['trigger_id']
 
-    if len(games) >= 100:
+    if len(GAMES) >= 100:
         msg = ('There are too many (more than 100) games '
                'running!')
-        open_exception_view(slack_client, trigger_id, msg)
+        views.open_exception_view(slack_client, trigger_id, msg)
         return make_response('', 200)
 
     app_conversations = slack_client.api_call(
@@ -58,17 +60,17 @@ def command():
         types='public_channel, private_channel, mpim, im')['channels']
     if channel_id not in [c['id'] for c in app_conversations]:
         msg = 'Please invite me first to this conversation!'
-        open_exception_view(slack_client, trigger_id, msg)
+        views.open_exception_view(slack_client, trigger_id, msg)
         return make_response('', 200)
 
-    if organizer_id in [g.organizer_id for g in games if g.is_running]:
+    if organizer_id in [g.organizer_id for g in GAMES if not g.is_over]:
         msg = ('You are the organizer of a game which is sill running. '
                'You can only have one game running at a time.')
-        open_exception_view(slack_client, trigger_id, msg)
+        views.open_exception_view(slack_client, trigger_id, msg)
         return make_response('', 200)
 
-    game_id = build_game_id(team_id, channel_id, organizer_id, trigger_id)
-    open_game_setup_view(slack_client, trigger_id, game_id)
+    game_id = ids.build_game_id(team_id, channel_id, organizer_id, trigger_id)
+    views.open_game_setup_view(slack_client, trigger_id, game_id)
 
     return make_response('', 200)
 
@@ -90,20 +92,21 @@ def message_actions():
         if not view_callback_id.startswith(APP_ID):
             return make_response('', 200)
 
-        game_id = slack_object_id_to_game_id(view_callback_id)
+        game_id = ids.slack_object_id_to_game_id(view_callback_id)
 
         if view_callback_id.startswith(APP_ID + '#game_setup_view'):
             question, truth, time_to_guess, time_to_vote = \
-                collect_game_setup(view, args.debug)
-            games[game_id] = Game(question, truth,
-                                  time_to_guess, time_to_vote,
-                                  game_id, slack_client)
+                views.collect_game_setup(view, args.debug)
+            GAMES[game_id] = Game(
+                question, truth, time_to_guess, time_to_vote,
+                game_id, APP_ID, slack_client)
             return make_response('', 200)
 
-        game = games.get(game_id)
+        game = GAMES.get(game_id)
         if game is None:
             msg = 'This game is dead!'
-            return Response(json.dumps(exception_view_response(msg)),
+            exception_view_response = views.build_exception_view_response(msg)
+            return Response(json.dumps(exception_view_response),
                             mimetype='application/json',
                             status=200)
 
@@ -111,22 +114,28 @@ def message_actions():
             if game.time_left_to_guess < 0:
                 msg = ('Your guess will not be taken into account '
                        'because the guessing deadline has passed!')
-                return Response(json.dumps(exception_view_response(msg)),
+                exception_view_response = (
+                    views.build_exception_view_response(msg))
+                return Response(json.dumps(exception_view_response),
                                 mimetype='application/json',
                                 status=200)
-            game.add_guess(user_id, view)
-            game.update()
+            guess = views.collect_guess(view)
+            game.guesses[user_id] = guess
+            game.update_board()
             return make_response('', 200)
 
         if view_callback_id.startswith(APP_ID + '#vote_view'):
             if game.time_left_to_vote < 0:
                 msg = ('Your vote will not be taken into account '
                        'because the voting deadline has passed!')
-                return Response(json.dumps(exception_view_response(msg)),
+                exception_view_response = (
+                    views.build_exception_view_response(msg))
+                return Response(json.dumps(exception_view_response),
                                 mimetype='application/json',
                                 status=200)
-            game.add_vote(user_id, view)
-            game.update()
+            vote = views.collect_vote(view)
+            game.votes[user_id] = vote
+            game.update_board()
             return make_response('', 200)
 
     if message_action_type == 'block_actions':
@@ -135,33 +144,34 @@ def message_actions():
         if not action_block_id.startswith(APP_ID):
             return make_response('', 200)
 
-        game_id = slack_object_id_to_game_id(action_block_id)
+        game_id = ids.slack_object_id_to_game_id(action_block_id)
 
-        game = games.get(game_id)
+        game = GAMES.get(game_id)
         if game is None:
             msg = 'This game is dead!'
-            return Response(json.dumps(exception_view_response(msg)),
+            exception_view_response = views.build_exception_view_response(msg)
+            return Response(json.dumps(exception_view_response),
                             mimetype='application/json',
                             status=200)
 
         if action_block_id.startswith(APP_ID + '#guess_button_block'):
             if user_id == game.organizer_id:
                 msg = 'As the organizer of this game, you cannot guess!'
-                open_exception_view(slack_client, trigger_id, msg)
+                views.open_exception_view(slack_client, trigger_id, msg)
                 return make_response('', 200)
             if user_id == 'Truth':
                 msg = ("You cannot play bluffer because your slack user_id is "
                        "'Truth', which is a reserved word for the game.")
-                open_exception_view(slack_client, trigger_id, msg)
+                views.open_exception_view(slack_client, trigger_id, msg)
                 return make_response('', 200)
             if user_id not in game.potential_guessers:
                 msg = ('You cannot guess because when the set up of this '
                        'game started, you were not a member of this channel.')
-                open_exception_view(slack_client, trigger_id, msg)
+                views.open_exception_view(slack_client, trigger_id, msg)
                 return make_response('', 200)
             if user_id in game.guessers:
                 msg = 'You have already guessed!'
-                open_exception_view(slack_client, trigger_id, msg)
+                views.open_exception_view(slack_client, trigger_id, msg)
                 return make_response('', 200)
             game.open_guess_view(trigger_id)
             return make_response('', 200)
@@ -169,11 +179,11 @@ def message_actions():
         if action_block_id.startswith(APP_ID + '#vote_button_block'):
             if user_id not in game.guessers:
                 msg = 'Only guessers can vote!'
-                open_exception_view(slack_client, trigger_id, msg)
+                views.open_exception_view(slack_client, trigger_id, msg)
                 return make_response('', 200)
             if user_id in game.voters:
                 msg = 'You have already voted!'
-                open_exception_view(slack_client, trigger_id, msg)
+                views.open_exception_view(slack_client, trigger_id, msg)
                 return make_response('', 200)
             game.open_vote_view(trigger_id, user_id)
             return make_response('', 200)
