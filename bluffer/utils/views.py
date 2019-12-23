@@ -7,10 +7,10 @@ def get_view(basename):
     return get_json('views', basename)
 
 
+exception_view_template = get_view('exception.json')
 game_setup_view_template = get_view('game_setup.json')
 guess_view_template = get_view('guess.json')
 vote_view_template = get_view('vote.json')
-exception_view_template = get_view('exception.json')
 
 
 def build_exception_view(msg):
@@ -26,6 +26,11 @@ def build_game_setup_view(app_id, game_id):
     return res
 
 
+def build_exception_view_response(msg):
+    exception_view = build_exception_view(msg)
+    return {'response_action': 'update', 'view': exception_view}
+
+
 def open_view(slack_client, trigger_id, view):
     slack_client.api_call(
         'views.open',
@@ -38,13 +43,8 @@ def open_exception_view(slack_client, trigger_id, msg):
     open_view(slack_client, trigger_id, exception_view)
 
 
-def build_exception_view_response(msg):
-    exception_view = build_exception_view(msg)
-    return {'response_action': 'update', 'view': exception_view}
-
-
-def open_game_setup_view(slack_client, trigger_id, game_id):
-    game_setup_view = build_game_setup_view(game_id)
+def open_game_setup_view(slack_client, trigger_id, app_id, game_id):
+    game_setup_view = build_game_setup_view(app_id, game_id)
     open_view(slack_client, trigger_id, game_setup_view)
 
 
@@ -73,4 +73,3 @@ def collect_vote(vote_view):
     values = vote_view['state']['values']
     vote = int(values['vote']['vote']['selected_option']['value'])
     return vote
-

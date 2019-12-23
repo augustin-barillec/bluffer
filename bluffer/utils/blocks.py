@@ -30,11 +30,11 @@ def build_title_block(organizer_id):
 
 
 def build_pre_guess_stage_block():
-    return build_text_block('Preparing guessing stage...')
+    return build_text_block('Preparing guess stage...')
 
 
 def build_pre_vote_stage_block():
-    return build_text_block('Preparing voting stage...')
+    return build_text_block('Preparing vote stage...')
 
 
 def build_pre_results_stage_block():

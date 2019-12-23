@@ -30,7 +30,7 @@ def erase_dead_games():
             if GAMES[game_id].is_over:
                 dead_game_ids.append(game_id)
         for game_id in dead_game_ids:
-            GAMES[game_id].thread_update.join()
+            GAMES[game_id].thread_update_regularly.join()
             del GAMES[game_id]
         time.sleep(1)
 
@@ -38,8 +38,6 @@ def erase_dead_games():
 thread_erase_dead_games = threading.Thread(target=erase_dead_games)
 thread_erase_dead_games.daemon = True
 thread_erase_dead_games.start()
-
-app.run(host='0.0.0.0', port=5000)
 
 
 @app.route('/slack/command', methods=['POST'])
@@ -63,14 +61,15 @@ def command():
         views.open_exception_view(slack_client, trigger_id, msg)
         return make_response('', 200)
 
-    if organizer_id in [g.organizer_id for g in GAMES if not g.is_over]:
+    if organizer_id in [GAMES[id_].organizer_id for id_ in GAMES
+                        if not GAMES[id_].is_over]:
         msg = ('You are the organizer of a game which is sill running. '
                'You can only have one game running at a time.')
         views.open_exception_view(slack_client, trigger_id, msg)
         return make_response('', 200)
 
     game_id = ids.build_game_id(team_id, channel_id, organizer_id, trigger_id)
-    views.open_game_setup_view(slack_client, trigger_id, game_id)
+    views.open_game_setup_view(slack_client, trigger_id, APP_ID, game_id)
 
     return make_response('', 200)
 
@@ -187,3 +186,6 @@ def message_actions():
                 return make_response('', 200)
             game.open_vote_view(trigger_id, user_id)
             return make_response('', 200)
+
+
+app.run(host='0.0.0.0', port=5000)

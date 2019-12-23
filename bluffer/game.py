@@ -38,7 +38,6 @@ class Game:
         self.results = None
 
         self.potential_guessers = None
-        self.winners = None
 
         self.vote_view_id = None
 
@@ -50,7 +49,6 @@ class Game:
         self.anonymous_proposals_block = None
         self.truth_block = None
         self.results_block = None
-        self.winners_block = None
 
         self.guess_view = None
 
@@ -90,8 +88,9 @@ class Game:
             c1 = self.time_left_to_guess > 0
             c2 = self.remaining_potential_guessers
             if not(c1 and c2):
+                self.pre_vote_stage_block = \
+                    blocks.build_pre_vote_stage_block()
                 self.stage = 'pre_vote_stage'
-                self.pre_vote_stage_block = blocks.build_pre_vote_stage_block()
                 return
             return 'sleep'
 
@@ -112,18 +111,18 @@ class Game:
             c1 = self.time_left_to_vote > 0
             c2 = self.remaining_potential_voters
             if not(c1 and c2):
-                self.stage = 'preparing_results_stage'
-                self.pre_vote_stage_block = blocks.build_pre_vote_stage_block()
+                self.pre_results_stage_block = \
+                    blocks.build_pre_results_stage_block()
+                self.stage = 'pre_results_stage'
                 return
             return 'sleep'
 
         if self.stage == 'pre_results_stage':
             self.update_board()
             self.results = self.build_results()
-            self.winners = self.compute_winners()
             self.truth_block = self.build_truth_block()
             self.results_block = self.build_results_block()
-            self.winners_block = self.build_winners_block()
+            self.stage = 'results_stage'
             return
 
         if self.stage == 'results_stage':
@@ -159,7 +158,7 @@ class Game:
                     self.guessers_block,
                     blocks.divider_block]
 
-        if self.stage == 'preparing_vote_stage':
+        if self.stage == 'pre_vote_stage':
             return [blocks.divider_block,
                     self.title_block,
                     self.question_block,
@@ -172,7 +171,6 @@ class Game:
                     self.title_block,
                     self.question_block,
                     self.guessers_block,
-                    self.anonymous_proposals_block,
                     self.vote_button_block,
                     self.vote_timer_block,
                     self.voters_block,
@@ -184,6 +182,7 @@ class Game:
                     self.question_block,
                     self.guessers_block,
                     self.voters_block,
+                    self.anonymous_proposals_block,
                     self.pre_results_stage_block,
                     blocks.divider_block]
 
@@ -193,7 +192,6 @@ class Game:
                     self.question_block,
                     self.truth_block,
                     self.results_block,
-                    self.winners_block,
                     blocks.divider_block]
 
     def build_slack_object_id(self, object_name):
@@ -268,8 +266,12 @@ class Game:
         return blocks.build_text_block(msg)
 
     def build_results_block(self):
+        msg = self.build_results_msg()
+        return blocks.build_text_block(msg)
+
+    def build_results_msg(self):
         if not self.guessers:
-            return blocks.build_text_block('No one played this game :sob:.')
+            return 'No one played this game :sob:.'
         msg = ['Scores:']
         for r in deepcopy(self.results):
             player = r['guesser']
@@ -278,9 +280,10 @@ class Game:
             r_msg = '{} wrote {}) {}'.format(
                 ids.user_display(player), index, guess)
             if player in self.voters:
-                voted_for = r['chosen_author']
-                if voted_for != 'Truth':
-                    voted_for = ids.user_display(voted_for)
+                if r['chosen_author'] == 'Truth':
+                    voted_for = 'the truth'
+                else:
+                    voted_for = ids.user_display(r['chosen_author'])
                 score = r['score']
                 if score == 1:
                     p = 'point'
@@ -291,28 +294,40 @@ class Game:
             else:
                 r_msg += ', did not vote and so scores 0 points.'
             msg.append(r_msg)
+        msg.append('\n')
+        msg.append(self.build_winners_msg())
         msg = '\n'.join(msg)
-        return blocks.build_text_block(msg)
+        return msg
 
-    def build_winners_block(self):
-        res = None
+    def build_winners_msg(self):
+        winners = self.compute_winners()
         if not self.voters:
-            msg = 'No one voted :sob:.'
-            res = blocks.build_text_block(msg)
-        if len(self.winners) == len(self.voters):
-            msg = "Well, it's a draw between the voters! :scales:"
-            res = blocks.build_text_block(msg)
-        if len(self.winners) == 1:
-            w = ids.user_display(self.winners[0])
-            msg = "And the winner is {}! :first_place_medal:".format(w)
-            res = blocks.build_text_block(msg)
-        if len(self.winners) > 1:
-            ws = [ids.user_display(w) for w in self.winners]
+            return 'No one voted :sob:.'
+        if len(self.voters) == 1:
+            r = self.results[0]
+            g = ids.user_display(r['guesser'])
+            ca = r['chosen_author']
+            if set(self.guessers) == set(self.voters):
+                assert ca == 'Truth'
+                msg = ("Bravo {}! You found the truth! But wasn't it "
+                       "the only voting option? :shushing_fac:".format(g))
+                return msg
+            if ca == 'Truth':
+                msg = ('Bravo {}! You found the truth! :v:'.format(g))
+                return msg
+            else:
+                msg = 'Hey {}, at least you voted! :grimacing:'.format(g)
+                return msg
+        if len(winners) == len(self.voters):
+            return "Well, it's a draw between the voters! :scales:"
+        if len(winners) == 1:
+            w = ids.user_display(winners[0])
+            return "And the winner is {}! :first_place_medal:".format(w)
+        if len(winners) > 1:
+            ws = [ids.user_display(w) for w in winners]
             msg_aux = ','.join(ws[:-1])
             msg_aux += ' and {}'.format(ws[-1])
-            msg = "And the winners are {}! :clap:".format(msg_aux)
-            res = blocks.build_text_block(msg)
-        return res
+            return "And the winners are {}! :clap:".format(msg_aux)
 
     def build_guess_view(self):
         res = deepcopy(views.guess_view_template)
