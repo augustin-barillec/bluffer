@@ -101,7 +101,6 @@ class Game:
                 self.pre_vote_stage_block = \
                     blocks.build_pre_vote_stage_block()
                 self.stage = 'pre_vote_stage'
-                return
             return 'sleep'
 
         if self.stage == 'pre_vote_stage':
@@ -124,7 +123,6 @@ class Game:
                 self.pre_results_stage_block = \
                     blocks.build_pre_results_stage_block()
                 self.stage = 'pre_results_stage'
-                return
             return 'sleep'
 
         if self.stage == 'pre_results_stage':
@@ -201,14 +199,22 @@ class Game:
                     blocks.divider_block]
 
         if self.stage == 'results_stage':
-            return [blocks.divider_block,
-                    self.title_block,
-                    self.question_block,
-                    self.truth_block,
-                    self.results_block,
-                    self.graph_block,
-                    blocks.build_text_block(self.graph_url),
-                    blocks.divider_block]
+            if not self.voters:
+                return [blocks.divider_block,
+                        self.title_block,
+                        self.question_block,
+                        self.truth_block,
+                        self.results_block,
+                        self.graph_block,
+                        blocks.divider_block]
+            else:
+                return [blocks.divider_block,
+                        self.title_block,
+                        self.question_block,
+                        self.truth_block,
+                        self.results_block,
+                        self.graph_block,
+                        blocks.divider_block]
 
     def build_slack_object_id(self, object_name):
         return ids.build_slack_object_id(self.app_id, object_name, self.id)
@@ -297,7 +303,7 @@ class Game:
             player = r['guesser']
             index = r['index']
             guess = r['guess']
-            r_msg = '{} wrote {}) {}'.format(
+            r_msg = '- {} wrote {}) {}'.format(
                 ids.user_display(player), index, guess)
             if player in self.voters:
                 if r['chosen_author'] == 'Truth':

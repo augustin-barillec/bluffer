@@ -47,6 +47,13 @@ def command():
     organizer_id = request.form['user_id']
     trigger_id = request.form['trigger_id']
 
+    slack_client.api_call(
+        'chat.postMessage',
+        channel=channel_id,
+        text="""
+        - alsdfjasdf
+        """)
+
     if len(GAMES) >= 100:
         msg = ('There are too many (more than 100) games '
                'running!')
