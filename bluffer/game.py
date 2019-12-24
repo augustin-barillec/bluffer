@@ -1,9 +1,13 @@
 import time
+import io
 import threading
 import random
+import networkx as nx
+import matplotlib.pyplot as plt
 from datetime import datetime
 from collections import OrderedDict
 from copy import deepcopy
+from google.cloud import storage
 from bluffer.utils import *
 
 
@@ -35,7 +39,10 @@ class Game:
         self.guesses = OrderedDict()
         self.votes = OrderedDict()
         self.signed_proposals = None
+        self.truth_index = None
         self.results = None
+        self.graph = None
+        self.graph_url = None
 
         self.potential_guessers = None
 
@@ -49,8 +56,11 @@ class Game:
         self.anonymous_proposals_block = None
         self.truth_block = None
         self.results_block = None
+        self.graph_block = None
 
         self.guess_view = None
+
+        self.graph_basename = 'graph_{}.png'.format(self.id)
 
         self.thread_update_regularly = threading.Thread(
             target=self.update_regularly)
@@ -119,9 +129,13 @@ class Game:
 
         if self.stage == 'pre_results_stage':
             self.update_board()
+            self.truth_index = self.compute_truth_index()
             self.results = self.build_results()
+            self.graph = self.build_graph()
+            self.graph_url = self.upload_graph()
             self.truth_block = self.build_truth_block()
             self.results_block = self.build_results_block()
+            self.graph_block = self.build_graph_block()
             self.stage = 'results_stage'
             return
 
@@ -192,6 +206,8 @@ class Game:
                     self.question_block,
                     self.truth_block,
                     self.results_block,
+                    self.graph_block,
+                    blocks.build_text_block(self.graph_url),
                     blocks.divider_block]
 
     def build_slack_object_id(self, object_name):
@@ -261,13 +277,17 @@ class Game:
         return blocks.build_text_block(msg)
 
     def build_truth_block(self):
-        index = self.author_to_index('Truth')
+        index = self.truth_index
         msg = 'Truth: {}) {}'.format(index, self.truth)
         return blocks.build_text_block(msg)
 
     def build_results_block(self):
         msg = self.build_results_msg()
         return blocks.build_text_block(msg)
+
+    def build_graph_block(self):
+        return blocks.build_image_block(url=self.graph_url,
+                                        alt_text='Voting graph')
 
     def build_results_msg(self):
         if not self.guessers:
@@ -310,7 +330,7 @@ class Game:
             if set(self.guessers) == set(self.voters):
                 assert ca == 'Truth'
                 msg = ("Bravo {}! You found the truth! But wasn't it "
-                       "the only voting option? :shushing_fac:".format(g))
+                       "the only voting option? :shushing_face:".format(g))
                 return msg
             if ca == 'Truth':
                 msg = ('Bravo {}! You found the truth! :v:'.format(g))
@@ -370,7 +390,7 @@ class Game:
 
     @property
     def remaining_potential_guessers(self):
-        return self.potential_guessers - set(self.guessers)
+        return set(self.potential_guessers) - set(self.guessers)
 
     @property
     def potential_voters(self):
@@ -434,12 +454,18 @@ class Game:
             if author_ == author:
                 return proposal
 
+    def get_guesser_name(self, guesser):
+        return self.potential_guessers[guesser]
+
     def build_votable_proposals(self, voter):
         res = []
         for index, author, proposal in self.signed_proposals:
             if author != voter:
                 res.append((index, proposal))
         return res
+
+    def compute_truth_index(self):
+        return self.author_to_index('Truth')
 
     def compute_truth_score(self, voter):
         return int(self.votes[voter] == self.author_to_index('Truth'))
@@ -464,6 +490,7 @@ class Game:
                 continue
             r['index'] = index
             r['guesser'] = author
+            r['guesser_name'] = self.get_guesser_name(author)
             r['guess'] = proposal
             if author not in self.voters:
                 r['score'] = 0
@@ -492,3 +519,48 @@ class Game:
             if r['score'] == max_score:
                 res.append(r['guesser'])
         return res
+
+    def build_graph(self):
+        res = nx.DiGraph()
+        res.add_node(self.truth_index)
+        for r in self.results:
+            res.add_node(r['index'])
+            if 'vote_index' in r:
+                res.add_edge(r['index'], r['vote_index'])
+        return res
+
+    def upload_graph(self):
+        g = self.graph
+
+        plt.figure(figsize=(6, 6))
+
+        plt.title('Voting graph')
+        pos = nx.spring_layout(g)
+
+        nx.draw_networkx_nodes(g, pos, node_color='#cc66ff', alpha=0.3,
+                               node_size=1000)
+
+        nx.draw_networkx_edges(g, pos, alpha=1.0, arrows=True, width=1.0)
+
+        truth_label = {self.truth_index: '{}) Truth'.format(self.truth_index)}
+        nx.draw_networkx_labels(g, pos, labels=truth_label, font_color='r')
+
+        guesser_labels = {r['index']: '{}) {}'.format(r['index'],
+                                                      r['guesser_name'])
+                          for r in self.results}
+        nx.draw_networkx_labels(g, pos, labels=guesser_labels, font_color='b')
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+
+        client = storage.Client()
+        bucket = client.bucket('bucket_bluffer')
+        blob = bucket.blob(self.graph_basename)
+
+        blob.upload_from_string(
+            buf.getvalue(),
+            content_type='image/png')
+
+        buf.close()
+
+        return blob.public_url

@@ -9,6 +9,7 @@ def get_block(basename):
 divider_block = get_block('divider.json')
 text_block_template = get_block('text.json')
 button_block_template = get_block('button.json')
+image_block_template = get_block('image.json')
 
 
 def build_text_block(msg):
@@ -21,6 +22,13 @@ def build_button_block(msg, id_):
     res = deepcopy(button_block_template)
     res['elements'][0]['text']['text'] = msg
     res['block_id'] = id_
+    return res
+
+
+def build_image_block(url, alt_text):
+    res = deepcopy(image_block_template)
+    res['image_url'] = url
+    res['alt_text'] = alt_text
     return res
 
 
