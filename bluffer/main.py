@@ -94,14 +94,11 @@ def message_actions():
         game_id = ids.slack_object_id_to_game_id(view_callback_id)
 
         if view_callback_id.startswith(APP_ID + '#game_setup_view'):
-            (question, truth,
-             time_to_guess, time_to_vote,
-             will_send_vote_reminders) = views.collect_game_setup(view,
-                                                                  args.debug)
+            question, truth, time_to_guess, time_to_vote = \
+                views.collect_game_setup(view, args.debug)
             GAMES[game_id] = Game(
                 question, truth,
                 time_to_guess, time_to_vote,
-                will_send_vote_reminders,
                 game_id, APP_ID,
                 slack_client)
             return make_response('', 200)
@@ -151,12 +148,11 @@ def message_actions():
         game_id = ids.slack_object_id_to_game_id(action_block_id)
 
         game = GAMES.get(game_id)
+
         if game is None:
             msg = 'This game is dead!'
-            exception_view_response = views.build_exception_view_response(msg)
-            return Response(json.dumps(exception_view_response),
-                            mimetype='application/json',
-                            status=200)
+            views.open_exception_view(slack_client, trigger_id, msg)
+            return make_response('', 200)
 
         if action_block_id.startswith(APP_ID + '#guess_button_block'):
             if user_id == game.organizer_id:

@@ -156,50 +156,6 @@
 					"value": "5"
 				}
 			}
-		},
-		{
-			"type": "input",
-			"block_id": "vote_reminders",
-            "label": {
-				"type": "plain_text",
-				"text": "Send vote reminders",
-				"emoji": true
-			},
-			"element": {
-				"type": "static_select",
-				"action_id": "vote_reminders",
-				"placeholder": {
-					"type": "plain_text",
-					"text": "Select an item",
-					"emoji": true
-				},
-				"options": [
-					{
-						"text": {
-							"type": "plain_text",
-							"text": "Yes",
-							"emoji": true
-						},
-						"value": "True"
-					},
-					{
-						"text": {
-							"type": "plain_text",
-							"text": "No",
-							"emoji": true
-						},
-						"value": "False"
-					}
-				],
-				"initial_option": {
-					"text": {
-						"type": "plain_text",
-						"text": "Yes",
-						"emoji": true
-					},
-					"value": "True"
-				}
-			}
 		}
 	]
 }

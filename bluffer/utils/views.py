@@ -60,11 +60,7 @@ def collect_game_setup(game_setup_view, debug):
     else:
         time_to_guess = 40
         time_to_vote = 35
-    will_send_vote_reminders = bool((values['vote_reminders']['vote_reminders']
-                                           ['selected_option']['value']))
-    print(will_send_vote_reminders)
-    return (question, truth, time_to_guess, time_to_vote,
-            will_send_vote_reminders)
+    return question, truth, time_to_guess, time_to_vote
 
 
 def collect_guess(guess_view):

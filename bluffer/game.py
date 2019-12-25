@@ -15,7 +15,6 @@ class Game:
     def __init__(self,
                  question, truth,
                  time_to_guess, time_to_vote,
-                 will_send_vote_reminders,
                  game_id, app_id,
                  slack_client):
 
@@ -23,7 +22,6 @@ class Game:
         self.truth = truth
         self.time_to_guess = time_to_guess
         self.time_to_vote = time_to_vote
-        self.will_send_vote_reminders = will_send_vote_reminders
         self.id = game_id
         self.app_id = app_id
         self.slack_client = slack_client
@@ -118,8 +116,7 @@ class Game:
                 self.build_anonymous_proposals_block()
             self.vote_button_block = self.build_vote_button_block()
             self.vote_deadline = timer.compute_deadline(self.time_to_vote)
-            if self.will_send_vote_reminders:
-                self.send_vote_reminders()
+            self.send_vote_reminders()
             self.stage = 'vote_stage'
             return
 
@@ -192,6 +189,7 @@ class Game:
             return [blocks.divider_block,
                     self.title_block,
                     self.question_block,
+                    self.anonymous_proposals_block,
                     self.guessers_block,
                     self.vote_button_block,
                     self.vote_timer_block,
@@ -202,9 +200,9 @@ class Game:
             return [blocks.divider_block,
                     self.title_block,
                     self.question_block,
+                    self.anonymous_proposals_block,
                     self.guessers_block,
                     self.voters_block,
-                    self.anonymous_proposals_block,
                     self.pre_results_stage_block,
                     blocks.divider_block]
 
@@ -347,7 +345,7 @@ class Game:
             ca = r['chosen_author']
             if set(self.guessers) == set(self.voters):
                 assert ca == 'Truth'
-                msg = ("Thank you for your vote {}! :pray:".format(g))
+                msg = ("They are too scared to play with you, {}!".format(g))
                 return msg
             if ca == 'Truth':
                 msg = ('Bravo {}! You found the truth! :v:'.format(g))
@@ -549,7 +547,7 @@ class Game:
     def upload_graph(self):
         g = self.graph
 
-        plt.figure(figsize=(6, 6))
+        plt.figure(figsize=(7, 7))
 
         plt.title('Voting graph')
         pos = nx.spring_layout(g)
