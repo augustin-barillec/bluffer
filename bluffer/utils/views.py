@@ -19,9 +19,9 @@ def build_exception_view(msg):
     return res
 
 
-def build_game_setup_view(app_id, game_id):
+def build_game_setup_view(secret_prefix, game_id):
     res = deepcopy(game_setup_view_template)
-    id_ = build_slack_object_id(app_id, 'game_setup_view', game_id)
+    id_ = build_slack_object_id(secret_prefix, 'game_setup_view', game_id)
     res['callback_id'] = id_
     return res
 
@@ -43,8 +43,8 @@ def open_exception_view(slack_client, trigger_id, msg):
     open_view(slack_client, trigger_id, exception_view)
 
 
-def open_game_setup_view(slack_client, trigger_id, app_id, game_id):
-    game_setup_view = build_game_setup_view(app_id, game_id)
+def open_game_setup_view(slack_client, trigger_id, secret_prefix, game_id):
+    game_setup_view = build_game_setup_view(secret_prefix, game_id)
     open_view(slack_client, trigger_id, game_setup_view)
 
 

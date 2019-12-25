@@ -2,8 +2,8 @@ def build_game_id(team_id, channel_id, organizer_id, trigger_id):
     return '{}&{}&{}&{}'.format(team_id, channel_id, organizer_id, trigger_id)
 
 
-def build_slack_object_id(app_id, object_name, game_id):
-    return '{}#{}#{}'.format(app_id, object_name, game_id)
+def build_slack_object_id(secret_prefix, object_name, game_id):
+    return '{}#{}#{}'.format(secret_prefix, object_name, game_id)
 
 
 def slack_object_id_to_game_id(slack_object_id):

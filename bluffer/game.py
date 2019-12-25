@@ -15,7 +15,8 @@ class Game:
     def __init__(self,
                  question, truth,
                  time_to_guess, time_to_vote,
-                 game_id, app_id,
+                 game_id, secret_prefix,
+                 bucket_name, bucket_directory_name,
                  slack_client):
 
         self.question = question
@@ -23,7 +24,9 @@ class Game:
         self.time_to_guess = time_to_guess
         self.time_to_vote = time_to_vote
         self.id = game_id
-        self.app_id = app_id
+        self.secret_prefix = secret_prefix
+        self.bucket_name = bucket_name
+        self.bucket_directory_name = bucket_directory_name
         self.slack_client = slack_client
 
         self.channel_id = ids.game_id_to_channel_id(game_id)
@@ -134,11 +137,11 @@ class Game:
             self.update_board()
             self.truth_index = self.compute_truth_index()
             self.results = self.build_results()
-            self.graph = self.build_graph()
-            self.graph_url = self.upload_graph()
             self.truth_block = self.build_truth_block()
             self.results_block = self.build_results_block()
             if self.guessers:
+                self.graph = self.build_graph()
+                self.graph_url = self.upload_graph()
                 self.winners_block = self.build_winners_block()
                 self.graph_block = self.build_graph_block()
             self.stage = 'results_stage'
@@ -225,7 +228,8 @@ class Game:
                         blocks.divider_block]
 
     def build_slack_object_id(self, object_name):
-        return ids.build_slack_object_id(self.app_id, object_name, self.id)
+        return ids.build_slack_object_id(self.secret_prefix,
+                                         object_name, self.id)
 
     def build_guess_button_block_id(self):
         return self.build_slack_object_id('guess_button_block')
@@ -569,8 +573,8 @@ class Game:
         plt.savefig(buf, format='png')
 
         client = storage.Client()
-        bucket = client.bucket('bucket_bluffer')
-        blob = bucket.blob(self.graph_basename)
+        bucket = client.bucket(self.bucket_name)
+        blob = bucket.blob('{}/'self.graph_basename)
 
         blob.upload_from_string(
             buf.getvalue(),
