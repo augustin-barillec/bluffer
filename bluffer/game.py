@@ -574,7 +574,8 @@ class Game:
 
         client = storage.Client()
         bucket = client.bucket(self.bucket_name)
-        blob = bucket.blob('{}/'self.graph_basename)
+        blob = bucket.blob('{}/{}'.format(self.bucket_directory_name,
+                                          self.graph_basename))
 
         blob.upload_from_string(
             buf.getvalue(),

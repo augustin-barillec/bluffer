@@ -14,13 +14,14 @@ parser.add_argument('conf_path')
 args = parser.parse_args()
 
 with open(args.conf_path) as f:
-    conf = yaml.safe_load(args.conf_path)
-    
+    conf = yaml.safe_load(f)
+
 BOT_TOKEN = conf['bot_token']
 ROUTE_SUFFIX = conf['route_suffix']
 SECRET_PREFIX = conf['secret_prefix']
 BUCKET_NAME = conf['bucket']
 BUCKET_DIRECTORY_NAME = conf['bucket_directory']
+DEBUG = conf['debug']
 
 slack_client = SlackClient(token=BOT_TOKEN)
 
@@ -102,11 +103,12 @@ def message_actions():
 
         if view_callback_id.startswith(SECRET_PREFIX + '#game_setup_view'):
             question, truth, time_to_guess, time_to_vote = \
-                views.collect_game_setup(view, args.debug)
+                views.collect_game_setup(view, DEBUG)
             GAMES[game_id] = Game(
                 question, truth,
                 time_to_guess, time_to_vote,
                 game_id, SECRET_PREFIX,
+                BUCKET_NAME, BUCKET_DIRECTORY_NAME,
                 slack_client)
             return make_response('', 200)
 
