@@ -47,13 +47,6 @@ def command():
     organizer_id = request.form['user_id']
     trigger_id = request.form['trigger_id']
 
-    slack_client.api_call(
-        'chat.postMessage',
-        channel=channel_id,
-        text="""
-        - alsdfjasdf
-        """)
-
     if len(GAMES) >= 100:
         msg = ('There are too many (more than 100) games '
                'running!')
@@ -101,11 +94,16 @@ def message_actions():
         game_id = ids.slack_object_id_to_game_id(view_callback_id)
 
         if view_callback_id.startswith(APP_ID + '#game_setup_view'):
-            question, truth, time_to_guess, time_to_vote = \
-                views.collect_game_setup(view, args.debug)
+            (question, truth,
+             time_to_guess, time_to_vote,
+             will_send_vote_reminders) = views.collect_game_setup(view,
+                                                                  args.debug)
             GAMES[game_id] = Game(
-                question, truth, time_to_guess, time_to_vote,
-                game_id, APP_ID, slack_client)
+                question, truth,
+                time_to_guess, time_to_vote,
+                will_send_vote_reminders,
+                game_id, APP_ID,
+                slack_client)
             return make_response('', 200)
 
         game = GAMES.get(game_id)

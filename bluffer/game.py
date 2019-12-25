@@ -12,13 +12,18 @@ from bluffer.utils import *
 
 
 class Game:
-    def __init__(self, question, truth, time_to_guess, time_to_vote,
-                 game_id, app_id, slack_client):
+    def __init__(self,
+                 question, truth,
+                 time_to_guess, time_to_vote,
+                 will_send_vote_reminders,
+                 game_id, app_id,
+                 slack_client):
 
         self.question = question
         self.truth = truth
         self.time_to_guess = time_to_guess
         self.time_to_vote = time_to_vote
+        self.will_send_vote_reminders = will_send_vote_reminders
         self.id = game_id
         self.app_id = app_id
         self.slack_client = slack_client
@@ -40,6 +45,7 @@ class Game:
         self.votes = OrderedDict()
         self.signed_proposals = None
         self.truth_index = None
+        self.timestamps_of_vote_reminders = None
         self.results = None
         self.graph = None
         self.graph_url = None
@@ -56,6 +62,7 @@ class Game:
         self.anonymous_proposals_block = None
         self.truth_block = None
         self.results_block = None
+        self.winners_block = None
         self.graph_block = None
 
         self.guess_view = None
@@ -111,7 +118,8 @@ class Game:
                 self.build_anonymous_proposals_block()
             self.vote_button_block = self.build_vote_button_block()
             self.vote_deadline = timer.compute_deadline(self.time_to_vote)
-            self.send_vote_reminders()
+            if self.will_send_vote_reminders:
+                self.send_vote_reminders()
             self.stage = 'vote_stage'
             return
 
@@ -133,7 +141,9 @@ class Game:
             self.graph_url = self.upload_graph()
             self.truth_block = self.build_truth_block()
             self.results_block = self.build_results_block()
-            self.graph_block = self.build_graph_block()
+            if self.guessers:
+                self.winners_block = self.build_winners_block()
+                self.graph_block = self.build_graph_block()
             self.stage = 'results_stage'
             return
 
@@ -199,13 +209,12 @@ class Game:
                     blocks.divider_block]
 
         if self.stage == 'results_stage':
-            if not self.voters:
+            if not self.guessers:
                 return [blocks.divider_block,
                         self.title_block,
                         self.question_block,
                         self.truth_block,
                         self.results_block,
-                        self.graph_block,
                         blocks.divider_block]
             else:
                 return [blocks.divider_block,
@@ -213,6 +222,7 @@ class Game:
                         self.question_block,
                         self.truth_block,
                         self.results_block,
+                        self.winners_block,
                         self.graph_block,
                         blocks.divider_block]
 
@@ -291,6 +301,10 @@ class Game:
         msg = self.build_results_msg()
         return blocks.build_text_block(msg)
 
+    def build_winners_block(self):
+        msg = self.build_winners_msg()
+        return blocks.build_text_block(msg)
+
     def build_graph_block(self):
         return blocks.build_image_block(url=self.graph_url,
                                         alt_text='Voting graph')
@@ -303,7 +317,7 @@ class Game:
             player = r['guesser']
             index = r['index']
             guess = r['guess']
-            r_msg = '- {} wrote {}) {}'.format(
+            r_msg = '• {} wrote {}) {}'.format(
                 ids.user_display(player), index, guess)
             if player in self.voters:
                 if r['chosen_author'] == 'Truth':
@@ -320,8 +334,6 @@ class Game:
             else:
                 r_msg += ', did not vote and so scores 0 points.'
             msg.append(r_msg)
-        msg.append('\n')
-        msg.append(self.build_winners_msg())
         msg = '\n'.join(msg)
         return msg
 
@@ -335,8 +347,7 @@ class Game:
             ca = r['chosen_author']
             if set(self.guessers) == set(self.voters):
                 assert ca == 'Truth'
-                msg = ("Bravo {}! You found the truth! But wasn't it "
-                       "the only voting option? :shushing_face:".format(g))
+                msg = ("Thank you for your vote {}! :pray:".format(g))
                 return msg
             if ca == 'Truth':
                 msg = ('Bravo {}! You found the truth! :v:'.format(g))
