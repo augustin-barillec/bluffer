@@ -551,7 +551,7 @@ class Game:
     def upload_graph(self):
         g = self.graph
 
-        side_length = int(len(self.guessers)/2) + 5
+        side_length = int(len(self.guessers)/2) + 7
 
         plt.figure(figsize=(side_length, side_length))
 
