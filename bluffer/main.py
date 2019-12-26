@@ -17,7 +17,7 @@ with open(args.conf_path) as f:
     conf = yaml.safe_load(f)
 
 BOT_TOKEN = conf['bot_token']
-ROUTE_SUFFIX = conf['route_suffix']
+PORT = conf['port']
 SECRET_PREFIX = conf['secret_prefix']
 BUCKET_NAME = conf['bucket']
 BUCKET_DIRECTORY_NAME = conf['bucket_directory']
@@ -47,7 +47,7 @@ thread_erase_dead_games.daemon = True
 thread_erase_dead_games.start()
 
 
-@app.route('/slack/command/{}'.format(ROUTE_SUFFIX), methods=['POST'])
+@app.route('/slack/command', methods=['POST'])
 def command():
     team_id = request.form['team_id']
     channel_id = request.form['channel_id']
@@ -82,7 +82,7 @@ def command():
     return make_response('', 200)
 
 
-@app.route('/slack/message_actions/{}'.format(ROUTE_SUFFIX), methods=['POST'])
+@app.route('/slack/message_actions', methods=['POST'])
 def message_actions():
     message_action = json.loads(request.form['payload'])
     message_action_type = message_action['type']
@@ -198,4 +198,4 @@ def message_actions():
             return make_response('', 200)
 
 
-app.run(host='0.0.0.0', port=5000)
+app.run(host='0.0.0.0', port=PORT)
