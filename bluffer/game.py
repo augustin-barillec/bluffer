@@ -551,7 +551,9 @@ class Game:
     def upload_graph(self):
         g = self.graph
 
-        plt.figure(figsize=(7, 7))
+        side_length = int(len(self.guessers)/2) + 5
+
+        plt.figure(figsize=(side_length, side_length))
 
         plt.title('Voting graph')
         pos = nx.spring_layout(g)
