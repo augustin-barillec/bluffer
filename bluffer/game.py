@@ -556,7 +556,7 @@ class Game:
         plt.figure(figsize=(side_length, side_length))
 
         plt.title('Voting graph')
-        pos = nx.spring_layout(g)
+        pos = nx.circular_layout(g)
 
         nx.draw_networkx_nodes(g, pos, node_color='#cc66ff', alpha=0.3,
                                node_size=1000)
