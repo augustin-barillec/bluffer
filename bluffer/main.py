@@ -42,11 +42,6 @@ def erase_dead_games():
         time.sleep(1)
 
 
-thread_erase_dead_games = threading.Thread(target=erase_dead_games)
-thread_erase_dead_games.daemon = True
-thread_erase_dead_games.start()
-
-
 @app.route('/slack/command', methods=['POST'])
 def command():
     team_id = request.form['team_id']
@@ -198,4 +193,9 @@ def message_actions():
             return make_response('', 200)
 
 
-app.run(host='0.0.0.0', port=PORT)
+if __name__ == '__main__':
+    thread_erase_dead_games = threading.Thread(target=erase_dead_games)
+    thread_erase_dead_games.daemon = True
+    thread_erase_dead_games.start()
+
+    app.run(host='0.0.0.0', port=PORT)

@@ -76,7 +76,7 @@ class Game:
         self.thread_update_regularly.start()
 
     def update_regularly(self):
-        while True:
+        while self.stage != 'over':
             start = datetime.now()
             post_action = self.update()
             end = datetime.now()
