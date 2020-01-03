@@ -14,7 +14,7 @@ from bluffer.utils import *
 class Game:
     def __init__(self,
                  question, truth,
-                 time_to_guess, time_to_vote,
+                 time_to_guess,
                  game_id, secret_prefix,
                  bucket_name, bucket_directory_name,
                  slack_client):
@@ -22,7 +22,7 @@ class Game:
         self.question = question
         self.truth = truth
         self.time_to_guess = time_to_guess
-        self.time_to_vote = time_to_vote
+        self.time_to_vote = 600
         self.id = game_id
         self.secret_prefix = secret_prefix
         self.bucket_name = bucket_name
@@ -48,8 +48,9 @@ class Game:
         self.votes = OrderedDict()
         self.signed_proposals = None
         self.truth_index = None
-        self.timestamps_of_vote_reminders = None
         self.results = None
+        self.max_score = None
+        self.winners = None
         self.graph = None
         self.graph_url = None
 
@@ -71,6 +72,8 @@ class Game:
         self.guess_view = None
 
         self.graph_basename = None
+
+        self.local_dir_path = None
 
         self.thread_update_regularly = threading.Thread(
             target=self.update_regularly)
@@ -147,11 +150,11 @@ class Game:
             self.truth_block = self.build_truth_block()
             self.results_block = self.build_results_block()
             if self.guessers:
+                self.max_score = self.compute_max_score()
+                self.winners = self.compute_winners()
                 self.graph = self.build_graph()
-                self.graph_basename = '{}_graph_{}.png'.format(
-                    self.start_datetime.strftime('%Y%m%d%H%M%S'),
-                    self.id)
-                self.graph_url = self.upload_graph()
+                self.graph_basename = self.compute_graph_basename()
+                self.graph_url = self.draw_graph()
                 self.winners_block = self.build_winners_block()
                 self.graph_block = self.build_graph_block()
             self.stage = 'results_stage'
@@ -354,14 +357,13 @@ class Game:
             guess = r['guess']
             score = r['score']
             p = r['p']
-            r_msg = '• {}: {}) {} ({} {}).'.format(
+            r_msg = '• {} wrote {}) {} and scores {} {}.'.format(
                 ids.user_display(player), index, guess, score, p)
             msg.append(r_msg)
         msg = '\n'.join(msg)
         return msg
 
     def build_winners_msg(self):
-        winners = self.compute_winners()
         if not self.voters:
             return 'No one voted :sob:.'
         if len(self.voters) == 1:
@@ -370,7 +372,7 @@ class Game:
             ca = r['chosen_author']
             if set(self.guessers) == set(self.voters):
                 assert ca == 'Truth'
-                msg = ("They are too scared to play with you, {}!".format(g))
+                msg = ('They are too scared to play with you, {}!'.format(g))
                 return msg
             if ca == 'Truth':
                 msg = ('Bravo {}! You found the truth! :v:'.format(g))
@@ -378,13 +380,15 @@ class Game:
             else:
                 msg = 'Hey {}, at least you voted! :grimacing:'.format(g)
                 return msg
-        if len(winners) == len(self.voters):
+        if self.max_score == 0:
+            return 'Zero points scored!'
+        if len(self.winners) == len(self.voters):
             return "Well, it's a draw between the voters! :scales:"
-        if len(winners) == 1:
-            w = ids.user_display(winners[0])
+        if len(self.winners) == 1:
+            w = ids.user_display(self.winners[0])
             return "And the winner is {}! :first_place_medal:".format(w)
-        if len(winners) > 1:
-            ws = [ids.user_display(w) for w in winners]
+        if len(self.winners) > 1:
+            ws = [ids.user_display(w) for w in self.winners]
             msg_aux = ','.join(ws[:-1])
             msg_aux += ' and {}'.format(ws[-1])
             return "And the winners are {}! :clap:".format(msg_aux)
@@ -558,10 +562,9 @@ class Game:
         return results
 
     def compute_winners(self):
-        max_score = self.compute_max_score()
         res = []
         for r in self.results:
-            if r['score'] == max_score:
+            if r['score'] == self.max_score:
                 res.append(r['guesser'])
         return res
 
@@ -574,7 +577,7 @@ class Game:
                 res.add_edge(r['index'], r['vote_index'])
         return res
 
-    def upload_graph(self):
+    def draw_graph(self):
         g = self.graph
 
         side_length = int(len(self.guessers)/2) + 7
@@ -595,7 +598,17 @@ class Game:
         guesser_labels = {r['index']: '{}) {}'.format(r['index'],
                                                       r['guesser_name'])
                           for r in self.results}
-        nx.draw_networkx_labels(g, pos, labels=guesser_labels, font_color='b')
+
+        indexes_of_winners = set(r['index'] for r in self.results
+                                 if r['guesser'] in self.winners)
+        indexes_of_losers = set(r['index'] for r in self.results
+                                if r['guesser'] not in self.winners)
+
+        winner_labels = {k: guesser_labels[k] for k in indexes_of_winners}
+        loser_labels = {k: guesser_labels[k] for k in indexes_of_losers}
+
+        nx.draw_networkx_labels(g, pos, labels=loser_labels, font_color='b')
+        nx.draw_networkx_labels(g, pos, labels=winner_labels, font_color='g')
 
         buf = io.BytesIO()
         plt.savefig(buf, format='png')
@@ -612,3 +625,8 @@ class Game:
         buf.close()
 
         return blob.public_url
+
+    def compute_graph_basename(self):
+        return '{}_graph_{}.png'.format(
+                    self.start_datetime.strftime('%Y%m%d%H%M%S'),
+                    self.id)

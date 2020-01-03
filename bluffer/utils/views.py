@@ -55,12 +55,9 @@ def collect_game_setup(game_setup_view, debug):
     if not debug:
         time_to_guess = int((values['time_to_guess']['time_to_guess']
                                    ['selected_option']['value']))*60
-        time_to_vote = int((values['time_to_vote']['time_to_vote']
-                                  ['selected_option']['value']))*60
     else:
         time_to_guess = 40
-        time_to_vote = 35
-    return question, truth, time_to_guess, time_to_vote
+    return question, truth, time_to_guess
 
 
 def collect_guess(guess_view):

@@ -97,11 +97,11 @@ def message_actions():
         game_id = ids.slack_object_id_to_game_id(view_callback_id)
 
         if view_callback_id.startswith(SECRET_PREFIX + '#game_setup_view'):
-            question, truth, time_to_guess, time_to_vote = \
+            question, truth, time_to_guess = \
                 views.collect_game_setup(view, DEBUG)
             GAMES[game_id] = Game(
                 question, truth,
-                time_to_guess, time_to_vote,
+                time_to_guess,
                 game_id, SECRET_PREFIX,
                 BUCKET_NAME, BUCKET_DIRECTORY_NAME,
                 slack_client)

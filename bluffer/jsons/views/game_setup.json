@@ -112,50 +112,6 @@
 					"value": "15"
 				}
 			}
-		},
-		{
-			"type": "input",
-			"block_id": "time_to_vote",
-            "label": {
-				"type": "plain_text",
-				"text": "Time to vote",
-				"emoji": true
-			},
-			"element": {
-				"type": "static_select",
-				"action_id": "time_to_vote",
-				"placeholder": {
-					"type": "plain_text",
-					"text": "Select an item",
-					"emoji": true
-				},
-				"options": [
-					{
-						"text": {
-							"type": "plain_text",
-							"text": "5 min",
-							"emoji": true
-						},
-						"value": "5"
-					},
-					{
-						"text": {
-							"type": "plain_text",
-							"text": "10 min",
-							"emoji": true
-						},
-						"value": "10"
-					}
-				],
-				"initial_option": {
-					"text": {
-						"type": "plain_text",
-						"text": "5 min",
-						"emoji": true
-					},
-					"value": "5"
-				}
-			}
 		}
 	]
 }
