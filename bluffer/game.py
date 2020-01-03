@@ -37,8 +37,10 @@ class Game:
 
         self.stage = 'pre_guess_stage'
 
-        self.start_call = None
+        self.upper_ts = None
+        self.lower_ts = None
 
+        self.start_datetime = datetime.now()
         self.guess_deadline = None
         self.vote_deadline = None
 
@@ -68,7 +70,7 @@ class Game:
 
         self.guess_view = None
 
-        self.graph_basename = 'graph_{}.png'.format(self.id)
+        self.graph_basename = None
 
         self.thread_update_regularly = threading.Thread(
             target=self.update_regularly)
@@ -88,116 +90,125 @@ class Game:
     def update(self):
 
         if self.stage == 'pre_guess_stage':
-            self.start_call = self.slack_client.api_call(
-                'chat.postMessage',
-                channel=self.channel_id,
-                blocks=self.board)
+            self.upper_ts = self.post_board('upper')
+            self.lower_ts = self.post_board('lower')
             self.question_block = blocks.build_text_block(self.question)
             self.guess_button_block = self.build_guess_button_block()
             self.guess_view = self.build_guess_view()
-            self.guess_deadline = timer.compute_deadline(self.time_to_guess)
+            self.start_datetime = datetime.now()
+            self.guess_deadline = timer.compute_deadline(
+                self.start_datetime, self.time_to_guess)
             self.potential_guessers = members.get_potential_guessers(
                 self.slack_client, self.channel_id, self.organizer_id)
             self.stage = 'guess_stage'
+            self.update_board('all')
             return
 
         if self.stage == 'guess_stage':
-            self.update_board()
+            self.update_board('lower')
             c1 = self.time_left_to_guess > 0
             c2 = self.remaining_potential_guessers
             if not(c1 and c2):
                 self.pre_vote_stage_block = \
                     blocks.build_pre_vote_stage_block()
                 self.stage = 'pre_vote_stage'
+                self.update_board('all')
+                return
             return 'sleep'
 
         if self.stage == 'pre_vote_stage':
-            self.update_board()
             self.vote_view_id = self.build_vote_view_id()
             self.signed_proposals = self.build_signed_proposals()
             self.anonymous_proposals_block = \
                 self.build_anonymous_proposals_block()
             self.vote_button_block = self.build_vote_button_block()
-            self.vote_deadline = timer.compute_deadline(self.time_to_vote)
+            self.vote_deadline = timer.compute_deadline(
+                datetime.now(), self.time_to_vote)
             self.send_vote_reminders()
             self.stage = 'vote_stage'
+            self.update_board('all')
             return
 
         if self.stage == 'vote_stage':
-            self.update_board()
+            self.update_board('lower')
             c1 = self.time_left_to_vote > 0
             c2 = self.remaining_potential_voters
             if not(c1 and c2):
                 self.pre_results_stage_block = \
                     blocks.build_pre_results_stage_block()
                 self.stage = 'pre_results_stage'
+                self.update_board('all')
+                return
             return 'sleep'
 
         if self.stage == 'pre_results_stage':
-            self.update_board()
             self.truth_index = self.compute_truth_index()
             self.results = self.build_results()
             self.truth_block = self.build_truth_block()
             self.results_block = self.build_results_block()
             if self.guessers:
                 self.graph = self.build_graph()
+                self.graph_basename = '{}_graph_{}.png'.format(
+                    self.start_datetime.strftime('%Y%m%d%H%M%S'),
+                    self.id)
                 self.graph_url = self.upload_graph()
                 self.winners_block = self.build_winners_block()
                 self.graph_block = self.build_graph_block()
             self.stage = 'results_stage'
+            self.update_board('all')
             return
 
         if self.stage == 'results_stage':
-            self.update_board()
             self.stage = 'over'
             return
 
         if self.stage == 'over':
             return
 
-    def update_board(self):
+    def post_board(self, part):
+        return self.slack_client.api_call(
+            'chat.postMessage',
+            channel=self.channel_id,
+            blocks=getattr(self, part + '_board'))['ts']
+
+    def update_board(self, part):
+        if part == 'all':
+            self.update_board('upper')
+            self.update_board('lower')
+            return
         self.slack_client.api_call(
             'chat.update',
             channel=self.channel_id,
-            ts=self.start_call['ts'],
-            blocks=self.board)
+            ts=getattr(self, part + '_ts'),
+            blocks=getattr(self, part + '_board'))
 
     @property
-    def board(self):
+    def upper_board(self):
 
         if self.stage == 'pre_guess_stage':
             return [blocks.divider_block,
                     self.title_block,
-                    self.pre_guess_stage_block,
-                    blocks.divider_block]
+                    self.pre_guess_stage_block]
 
         if self.stage == 'guess_stage':
             return [blocks.divider_block,
                     self.title_block,
                     self.question_block,
-                    self.guess_button_block,
-                    self.guess_timer_block,
-                    self.guessers_block,
-                    blocks.divider_block]
+                    self.guess_button_block]
 
         if self.stage == 'pre_vote_stage':
             return [blocks.divider_block,
                     self.title_block,
                     self.question_block,
                     self.guessers_block,
-                    self.pre_vote_stage_block,
-                    blocks.divider_block]
+                    self.pre_vote_stage_block]
 
         if self.stage == 'vote_stage':
             return [blocks.divider_block,
                     self.title_block,
                     self.question_block,
-                    self.anonymous_proposals_block,
                     self.guessers_block,
-                    self.vote_button_block,
-                    self.vote_timer_block,
-                    self.voters_block,
-                    blocks.divider_block]
+                    self.vote_button_block]
 
         if self.stage == 'pre_results_stage':
             return [blocks.divider_block,
@@ -206,8 +217,7 @@ class Game:
                     self.anonymous_proposals_block,
                     self.guessers_block,
                     self.voters_block,
-                    self.pre_results_stage_block,
-                    blocks.divider_block]
+                    self.pre_results_stage_block]
 
         if self.stage == 'results_stage':
             if not self.guessers:
@@ -215,8 +225,7 @@ class Game:
                         self.title_block,
                         self.question_block,
                         self.truth_block,
-                        self.results_block,
-                        blocks.divider_block]
+                        self.results_block]
             else:
                 return [blocks.divider_block,
                         self.title_block,
@@ -224,8 +233,32 @@ class Game:
                         self.truth_block,
                         self.results_block,
                         self.winners_block,
-                        self.graph_block,
-                        blocks.divider_block]
+                        self.graph_block]
+
+    @property
+    def lower_board(self):
+
+        if self.stage == 'pre_guess_stage':
+            return [blocks.divider_block]
+
+        if self.stage == 'guess_stage':
+            return [self.guess_timer_block,
+                    self.guessers_block,
+                    blocks.divider_block]
+
+        if self.stage == 'pre_vote_stage':
+            return [blocks.divider_block]
+
+        if self.stage == 'vote_stage':
+            return [self.vote_timer_block,
+                    self.voters_block,
+                    blocks.divider_block]
+
+        if self.stage == 'pre_results_stage':
+            return [blocks.divider_block]
+
+        if self.stage == 'results_stage':
+            return [blocks.divider_block]
 
     def build_slack_object_id(self, object_name):
         return ids.build_slack_object_id(self.secret_prefix,
@@ -296,7 +329,7 @@ class Game:
 
     def build_truth_block(self):
         index = self.truth_index
-        msg = 'Truth: {}) {}'.format(index, self.truth)
+        msg = '• Truth: {}) {}'.format(index, self.truth)
         return blocks.build_text_block(msg)
 
     def build_results_block(self):
@@ -314,27 +347,15 @@ class Game:
     def build_results_msg(self):
         if not self.guessers:
             return 'No one played this game :sob:.'
-        msg = ['Scores:']
+        msg = []
         for r in deepcopy(self.results):
             player = r['guesser']
             index = r['index']
             guess = r['guess']
-            r_msg = '• {} wrote {}) {}'.format(
-                ids.user_display(player), index, guess)
-            if player in self.voters:
-                if r['chosen_author'] == 'Truth':
-                    voted_for = 'the truth'
-                else:
-                    voted_for = ids.user_display(r['chosen_author'])
-                score = r['score']
-                if score == 1:
-                    p = 'point'
-                else:
-                    p = 'points'
-                r_msg += ', voted for {} and scores {} {}.'.format(
-                    voted_for, score, p)
-            else:
-                r_msg += ', did not vote and so scores 0 points.'
+            score = r['score']
+            p = r['p']
+            r_msg = '• {}: {}) {} ({} {}).'.format(
+                ids.user_display(player), index, guess, score, p)
             msg.append(r_msg)
         msg = '\n'.join(msg)
         return msg
@@ -513,6 +534,7 @@ class Game:
             r['guess'] = proposal
             if author not in self.voters:
                 r['score'] = 0
+                r['p'] = 'points'
                 results.append(r)
                 continue
             vote_index = self.votes[author]
@@ -522,6 +544,10 @@ class Game:
             r['truth_score'] = self.compute_truth_score(author)
             r['bluff_score'] = self.compute_bluff_score(author)
             r['score'] = r['truth_score'] + r['bluff_score']
+            if r['score'] == 1:
+                r['p'] = 'point'
+            else:
+                r['p'] = 'points'
             results.append(r)
 
         def sort_key(r_):

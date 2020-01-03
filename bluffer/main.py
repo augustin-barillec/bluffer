@@ -126,7 +126,7 @@ def message_actions():
                                 status=200)
             guess = views.collect_guess(view)
             game.guesses[user_id] = guess
-            game.update_board()
+            game.update_board('lower')
             return make_response('', 200)
 
         if view_callback_id.startswith(SECRET_PREFIX + '#vote_view'):
@@ -140,7 +140,7 @@ def message_actions():
                                 status=200)
             vote = views.collect_vote(view)
             game.votes[user_id] = vote
-            game.update_board()
+            game.update_board('lower')
             return make_response('', 200)
 
     if message_action_type == 'block_actions':
