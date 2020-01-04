@@ -19,8 +19,9 @@ with open(args.conf_path) as f:
 BOT_TOKEN = conf['bot_token']
 PORT = conf['port']
 SECRET_PREFIX = conf['secret_prefix']
-BUCKET_NAME = conf['bucket']
-BUCKET_DIRECTORY_NAME = conf['bucket_directory']
+BUCKET_NAME = conf['bucket_name']
+BUCKET_DIR_NAME = conf['bucket_dir_name']
+LOCAL_DIR_PATH = conf['local_dir_path']
 DEBUG = conf['debug']
 
 slack_client = SlackClient(token=BOT_TOKEN)
@@ -103,7 +104,8 @@ def message_actions():
                 question, truth,
                 time_to_guess,
                 game_id, SECRET_PREFIX,
-                BUCKET_NAME, BUCKET_DIRECTORY_NAME,
+                BUCKET_NAME, BUCKET_DIR_NAME,
+                LOCAL_DIR_PATH,
                 slack_client)
             return make_response('', 200)
 
