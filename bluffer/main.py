@@ -21,6 +21,7 @@ PORT = conf['port']
 SECRET_PREFIX = conf['secret_prefix']
 BUCKET_NAME = conf['bucket_name']
 BUCKET_DIR_NAME = conf['bucket_dir_name']
+DRIVE_DIR_NAME = conf['drive_dir_name']
 LOCAL_DIR_PATH = conf['local_dir_path']
 DEBUG = conf['debug']
 
@@ -105,6 +106,7 @@ def message_actions():
                 time_to_guess,
                 game_id, SECRET_PREFIX,
                 BUCKET_NAME, BUCKET_DIR_NAME,
+                DRIVE_DIR_NAME,
                 LOCAL_DIR_PATH,
                 slack_client)
             return make_response('', 200)
