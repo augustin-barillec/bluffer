@@ -9,7 +9,6 @@ from collections import OrderedDict
 from copy import deepcopy
 from fpdf import FPDF
 from google.cloud import storage
-from apiclient import discovery
 from apiclient import http
 from bluffer.utils import *
 
@@ -20,9 +19,10 @@ class Game:
                  time_to_guess,
                  game_id, secret_prefix,
                  bucket_name, bucket_dir_name,
-                 drive_dir_name,
+                 drive_dir_id,
                  local_dir_path,
-                 slack_client):
+                 slack_client,
+                 drive_service):
 
         self.question = question
         self.truth = truth
@@ -32,11 +32,11 @@ class Game:
         self.secret_prefix = secret_prefix
         self.bucket_name = bucket_name
         self.bucket_dir_name = bucket_dir_name
-        self.drive_dir_name = drive_dir_name
+        self.drive_dir_id = drive_dir_id
         self.local_dir_path = local_dir_path
         self.slack_client = slack_client
 
-        self.drive_service = discovery.build('drive', 'v3')
+        self.drive_service = drive_service
 
         self.channel_id = ids.game_id_to_channel_id(game_id)
         self.organizer_id = ids.game_id_to_organizer_id(game_id)
@@ -172,8 +172,9 @@ class Game:
                 self.create_local_dir()
                 self.draw_graph()
                 self.build_summary()
-                self.graph_url = self.upload_graph()
-                self.summary_url = self.upload_summary()
+                self.graph_url = self.upload_graph_to_gs()
+                self.summary_url = self.upload_summary_to_gs()
+                self.upload_summary_to_drive()
                 self.delete_local_files()
                 self.winners_block = self.build_winners_block()
                 self.graph_block = self.build_graph_block()
@@ -711,10 +712,10 @@ class Game:
 
         return blob.public_url
 
-    def upload_graph(self):
+    def upload_graph_to_gs(self):
         return self.upload_to_gs(self.graph_local_path, 'graph')
 
-    def upload_summary(self):
+    def upload_summary_to_gs(self):
         return self.upload_to_gs(self.summary_local_path, 'summary')
 
     def compute_basename(self, core_name, ext):
@@ -745,41 +746,12 @@ class Game:
         os.remove(self.graph_local_path)
         os.remove(self.summary_local_path)
 
-    def drive_dir_exists(self):
-        return drive.drive_dir_exists(self.drive_service,
-                                      self.drive_dir_name)
-
-    def create_drive_dir(self):
-
-        drive_dir_id = drive.drive_dir_exists(self.drive_service,
-                                              self.drive_dir_name)
-
-        if not drive_dir_id:
-            folder_metadata = {
-                'name': 'Bluffer',
-                'mimeType': 'application/vnd.google-apps.folder'
-            }
-
-            folder = self.drive_service.files().create(
-                body=folder_metadata,
-                fields='webViewLink, id').execute()
-
-            self.drive_service.permissions().create(
-                fileId=folder.get('id'),
-                body={'type': 'anyone', 'role': 'reader'}).execute()
-
-            folder.get('webViewLink')
-        else:
-            folder = self.drive_service.files().get(
-                fileId=drive_dir_id,
-                fields='webViewLink').execute()
-
-        return folder.get('webViewLink')
-
     def upload_summary_to_drive(self):
 
         file_metadata = {'name': self.summary_basename,
-                         'parents': self.drive_dir_exists()}
-        media = http.MediaFileUpload(self., mimetype='application/pdf')
-        file = service.files().create(body=file_metadata,
-                                      media_body=media).execute()
+                         'parents': [self.drive_dir_id]}
+        media = http.MediaFileUpload(self.summary_local_path,
+                                     mimetype='application/pdf')
+        self.drive_service.files().create(
+            body=file_metadata,
+            media_body=media).execute()

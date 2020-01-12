@@ -5,6 +5,7 @@ import json
 import yaml
 from flask import Flask, Response, request, make_response
 from slackclient import SlackClient
+from apiclient import discovery
 from bluffer.game import Game
 from bluffer.utils import *
 
@@ -21,11 +22,12 @@ PORT = conf['port']
 SECRET_PREFIX = conf['secret_prefix']
 BUCKET_NAME = conf['bucket_name']
 BUCKET_DIR_NAME = conf['bucket_dir_name']
-DRIVE_DIR_NAME = conf['drive_dir_name']
+DRIVE_DIR_ID = conf['drive_dir_id']
 LOCAL_DIR_PATH = conf['local_dir_path']
 DEBUG = conf['debug']
 
 slack_client = SlackClient(token=BOT_TOKEN)
+drive_service = discovery.build('drive', 'v3')
 
 app = Flask(__name__)
 
@@ -106,9 +108,10 @@ def message_actions():
                 time_to_guess,
                 game_id, SECRET_PREFIX,
                 BUCKET_NAME, BUCKET_DIR_NAME,
-                DRIVE_DIR_NAME,
+                DRIVE_DIR_ID,
                 LOCAL_DIR_PATH,
-                slack_client)
+                slack_client,
+                drive_service)
             return make_response('', 200)
 
         game = GAMES.get(game_id)
