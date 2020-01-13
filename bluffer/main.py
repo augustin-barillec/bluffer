@@ -5,6 +5,7 @@ import json
 import yaml
 from flask import Flask, Response, request, make_response
 from slackclient import SlackClient
+from google.cloud import storage
 from apiclient import discovery
 from bluffer.game import Game
 from bluffer.utils import *
@@ -27,6 +28,8 @@ LOCAL_DIR_PATH = conf['local_dir_path']
 DEBUG = conf['debug']
 
 slack_client = SlackClient(token=BOT_TOKEN)
+storage_client = storage.Client()
+bucket = storage_client.bucket(BUCKET_NAME)
 drive_service = discovery.build('drive', 'v3')
 
 app = Flask(__name__)
@@ -53,8 +56,8 @@ def command():
     organizer_id = request.form['user_id']
     trigger_id = request.form['trigger_id']
 
-    if len(GAMES) >= 100:
-        msg = ('There are too many (more than 100) games '
+    if len(GAMES) >= 5:
+        msg = ('There are too many (more than 5) games '
                'running!')
         views.open_exception_view(slack_client, trigger_id, msg)
         return make_response('', 200)
@@ -107,10 +110,11 @@ def message_actions():
                 question, truth,
                 time_to_guess,
                 game_id, SECRET_PREFIX,
-                BUCKET_NAME, BUCKET_DIR_NAME,
+                BUCKET_DIR_NAME,
                 DRIVE_DIR_ID,
                 LOCAL_DIR_PATH,
                 slack_client,
+                bucket,
                 drive_service)
             return make_response('', 200)
 

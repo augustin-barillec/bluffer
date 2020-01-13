@@ -8,7 +8,6 @@ from datetime import datetime
 from collections import OrderedDict
 from copy import deepcopy
 from fpdf import FPDF
-from google.cloud import storage
 from apiclient import http
 from bluffer.utils import *
 
@@ -18,10 +17,11 @@ class Game:
                  question, truth,
                  time_to_guess,
                  game_id, secret_prefix,
-                 bucket_name, bucket_dir_name,
+                 bucket_dir_name,
                  drive_dir_id,
                  local_dir_path,
                  slack_client,
+                 bucket,
                  drive_service):
 
         self.question = question
@@ -30,12 +30,11 @@ class Game:
         self.time_to_vote = 600
         self.id = game_id
         self.secret_prefix = secret_prefix
-        self.bucket_name = bucket_name
         self.bucket_dir_name = bucket_dir_name
         self.drive_dir_id = drive_dir_id
         self.local_dir_path = local_dir_path
         self.slack_client = slack_client
-
+        self.bucket = bucket
         self.drive_service = drive_service
 
         self.channel_id = ids.game_id_to_channel_id(game_id)
@@ -81,11 +80,11 @@ class Game:
         self.guess_view = None
 
         self.graph_basename = None
-        self.summary_basename = None
+        self.report_basename = None
         self.graph_local_path = None
-        self.summary_local_path = None
+        self.report_local_path = None
         self.graph_url = None
-        self.summary_url = None
+        self.report_url = None
 
         self.thread_update_regularly = threading.Thread(
             target=self.update_regularly)
@@ -128,7 +127,7 @@ class Game:
                     blocks.build_pre_vote_stage_block()
                 self.stage = 'pre_vote_stage'
                 self.update_board('all')
-                return
+                return 'sleep'
             return 'sleep'
 
         if self.stage == 'pre_vote_stage':
@@ -153,7 +152,7 @@ class Game:
                     blocks.build_pre_results_stage_block()
                 self.stage = 'pre_results_stage'
                 self.update_board('all')
-                return
+                return 'sleep'
             return 'sleep'
 
         if self.stage == 'pre_results_stage':
@@ -167,14 +166,13 @@ class Game:
                 self.graph = self.build_graph()
                 self.graph_basename = self.compute_graph_basename()
                 self.graph_local_path = self.compute_graph_local_path()
-                self.summary_basename = self.compute_summary_basename()
-                self.summary_local_path = self.compute_summary_local_path()
-                self.create_local_dir()
+                self.report_basename = self.compute_report_basename()
+                self.report_local_path = self.compute_report_local_path()
                 self.draw_graph()
-                self.build_summary()
+                self.build_report()
                 self.graph_url = self.upload_graph_to_gs()
-                self.summary_url = self.upload_summary_to_gs()
-                self.upload_summary_to_drive()
+                self.report_url = self.upload_report_to_gs()
+                self.upload_report_to_drive()
                 self.delete_local_files()
                 self.winners_block = self.build_winners_block()
                 self.graph_block = self.build_graph_block()
@@ -369,11 +367,11 @@ class Game:
         return blocks.build_image_block(url=self.graph_url,
                                         alt_text='Voting graph')
 
-    def build_results_msg(self, target):
-        assert target in ('slack', 'pdf')
+    def build_results_msg(self, fmt):
+        assert fmt in ('slack', 'pdf')
         if not self.guessers:
             res = 'No one played this game'
-            if target == 'slack':
+            if fmt == 'slack':
                 res += ' :sob:.'
                 return res
             else:
@@ -381,7 +379,7 @@ class Game:
                 return res
         msg = []
         for r in deepcopy(self.results):
-            if target == 'slack':
+            if fmt == 'slack':
                 player = ids.user_display(r['guesser'])
             else:
                 player = r['guesser_name']
@@ -395,11 +393,11 @@ class Game:
         msg = '\n'.join(msg)
         return msg
 
-    def build_winners_msg(self, target):
-        assert target in ('slack', 'pdf')
+    def build_winners_msg(self, fmt):
+        assert fmt in ('slack', 'pdf')
         if not self.voters:
             res = 'No one voted'
-            if target == 'slack':
+            if fmt == 'slack':
                 res += ' :sob:.'
                 return res
             else:
@@ -407,7 +405,7 @@ class Game:
                 return res
         if len(self.voters) == 1:
             r = self.results[0]
-            if target == 'slack':
+            if fmt == 'slack':
                 g = ids.user_display(r['guesser'])
             else:
                 g = r['guesser_name']
@@ -418,14 +416,14 @@ class Game:
                 return msg
             if ca == 'Truth':
                 msg = 'Bravo {}! You found the truth!'.format(g)
-                if target == 'slack':
+                if fmt == 'slack':
                     msg += ' :v:'
                 else:
                     msg += ' :)'
                 return msg
             else:
                 msg = 'Hey {}, at least you voted! :grimacing:'.format(g)
-                if target == 'slack':
+                if fmt == 'slack':
                     msg += ' :grimacing:'
                 else:
                     msg += ' :|'
@@ -434,11 +432,11 @@ class Game:
             return 'Zero points scored!'
         if len(self.winners) == len(self.voters):
             msg = "Well, it's a draw!"
-            if target == 'slack':
+            if fmt == 'slack':
                 msg += ' :scales:'
             return msg
         if len(self.winners) == 1:
-            if target == 'slack':
+            if fmt == 'slack':
                 w = ids.user_display(self.winners[0])
                 emoji = ' :first_place_medal:'
             else:
@@ -446,7 +444,7 @@ class Game:
                 emoji = ''
             return 'And the winner is {}!{}'.format(w, emoji)
         if len(self.winners) > 1:
-            if target == 'slack':
+            if fmt == 'slack':
                 ws = [ids.user_display(w) for w in self.winners]
                 emoji = ' :clap:'
             else:
@@ -489,11 +487,17 @@ class Game:
 
     @property
     def guessers(self):
-        return self.guesses.keys()
+        if self.results is None:
+            return self.guesses.keys()
+        else:
+            return [r['guesser'] for r in self.results]
 
     @property
     def voters(self):
-        return self.votes.keys()
+        if self.results is None:
+            return self.votes.keys()
+        else:
+            return [r['guesser'] for r in self.results if 'vote_index' in r]
 
     @property
     def remaining_potential_guessers(self):
@@ -675,7 +679,7 @@ class Game:
 
         plt.savefig(self.graph_local_path)
 
-    def build_summary(self):
+    def build_report(self):
         pdf = FPDF('L')
         pdf.add_page()
 
@@ -685,28 +689,37 @@ class Game:
         font_path = fonts.get_font_path()
 
         pdf.add_font(font_family, '', font_path, uni=True)
-        pdf.set_font(font_family, '', 14)
         pdf.set_right_margin(148.5)
 
         organizer_name = members.user_id_to_user_name(
             self.slack_client, self.organizer_id)
         title = 'Game set up by {}'.format(organizer_name)
-        pdf.write(8, title + '\n')
-        pdf.write(8, self.question + '\n')
-        pdf.write(8, self.build_results_msg('pdf') + '\n')
-        pdf.write(8, self.build_winners_msg('pdf'))
 
-        pdf.output(self.summary_local_path, 'F')
+        pdf.set_font(font_family, '', 14)
+        pdf.write(8, title)
+        pdf.write(8, '\n\n')
+
+        pdf.set_font(font_family, '', 28)
+        pdf.write(11, self.question)
+        pdf.write(8, '\n\n')
+
+        pdf.set_font(font_family, '', 14)
+        msg = ['Truth: {}'.format(self.truth),
+               self.build_results_msg('pdf'),
+               self.build_winners_msg('pdf')]
+
+        msg = '\n\n'.join(msg)
+
+        pdf.write(8, msg)
+
+        pdf.output(self.report_local_path, 'F')
 
     def upload_to_gs(self, local_file_path, kind):
-        assert kind in ('graph', 'summary')
+        assert kind in ('graph', 'report')
         basename = os.path.basename(local_file_path)
 
-        client = storage.Client()
-        bucket = client.bucket(self.bucket_name)
-        blob = bucket.blob('{}/{}/{}'.format(self.bucket_dir_name,
-                                             kind,
-                                             basename))
+        blob = self.bucket.blob(
+            '{}/{}/{}'.format(self.bucket_dir_name, kind, basename))
 
         blob.upload_from_filename(local_file_path)
 
@@ -715,8 +728,18 @@ class Game:
     def upload_graph_to_gs(self):
         return self.upload_to_gs(self.graph_local_path, 'graph')
 
-    def upload_summary_to_gs(self):
-        return self.upload_to_gs(self.summary_local_path, 'summary')
+    def upload_report_to_gs(self):
+        return self.upload_to_gs(self.report_local_path, 'report')
+
+    def upload_report_to_drive(self):
+
+        file_metadata = {'name': self.start_datetime.strftime('%Y%m%d_%H%M%S'),
+                         'parents': [self.drive_dir_id]}
+        media = http.MediaFileUpload(self.report_local_path,
+                                     mimetype='application/pdf')
+        self.drive_service.files().create(
+            body=file_metadata,
+            media_body=media).execute()
 
     def compute_basename(self, core_name, ext):
         return '{}_{}_{}.{}'.format(
@@ -726,8 +749,8 @@ class Game:
     def compute_graph_basename(self):
         return self.compute_basename('graph', 'png')
 
-    def compute_summary_basename(self):
-        return self.compute_basename('summary', 'pdf')
+    def compute_report_basename(self):
+        return self.compute_basename('report', 'pdf')
 
     def compute_local_path(self, basename):
         return self.local_dir_path + '/' + basename
@@ -735,23 +758,9 @@ class Game:
     def compute_graph_local_path(self):
         return self.compute_local_path(self.graph_basename)
 
-    def compute_summary_local_path(self):
-        return self.compute_local_path(self.summary_basename)
-
-    def create_local_dir(self):
-        if not os.path.isdir(self.local_dir_path):
-            os.makedirs(self.local_dir_path)
+    def compute_report_local_path(self):
+        return self.compute_local_path(self.report_basename)
 
     def delete_local_files(self):
         os.remove(self.graph_local_path)
-        os.remove(self.summary_local_path)
-
-    def upload_summary_to_drive(self):
-
-        file_metadata = {'name': self.summary_basename,
-                         'parents': [self.drive_dir_id]}
-        media = http.MediaFileUpload(self.summary_local_path,
-                                     mimetype='application/pdf')
-        self.drive_service.files().create(
-            body=file_metadata,
-            media_body=media).execute()
+        os.remove(self.report_local_path)
