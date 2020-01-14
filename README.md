@@ -1,0 +1,1 @@
+A slack application to play bluffer games. 

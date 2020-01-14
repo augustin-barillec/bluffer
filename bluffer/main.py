@@ -26,6 +26,10 @@ BUCKET_DIR_NAME = conf['bucket_dir_name']
 DRIVE_DIR_ID = conf['drive_dir_id']
 LOCAL_DIR_PATH = conf['local_dir_path']
 DEBUG = conf['debug']
+DEBUG_TIME_TO_GUESS = conf['debug_time_to_guess']
+DEBUG_TIME_TO_VOTE = conf['debug_time_to_vote']
+DEBUG_DRIVE_DIR_ID = conf['debug_drive_dir_id']
+
 
 slack_client = SlackClient(token=BOT_TOKEN)
 storage_client = storage.Client()
@@ -56,8 +60,8 @@ def command():
     organizer_id = request.form['user_id']
     trigger_id = request.form['trigger_id']
 
-    if len(GAMES) >= 5:
-        msg = ('There are too many (more than 5) games '
+    if len(GAMES) >= 3:
+        msg = ('There are too many (more than 3) games '
                'running!')
         views.open_exception_view(slack_client, trigger_id, msg)
         return make_response('', 200)
@@ -105,13 +109,22 @@ def message_actions():
 
         if view_callback_id.startswith(SECRET_PREFIX + '#game_setup_view'):
             question, truth, time_to_guess = \
-                views.collect_game_setup(view, DEBUG)
+                views.collect_game_setup(view)
+            if not DEBUG:
+                time_to_vote = 600
+                bucket_dir_name = BUCKET_DIR_NAME
+                drive_dir_id = DRIVE_DIR_ID
+            else:
+                time_to_guess = DEBUG_TIME_TO_GUESS
+                time_to_vote = DEBUG_TIME_TO_VOTE
+                bucket_dir_name = 'test_' + BUCKET_DIR_NAME
+                drive_dir_id = DEBUG_DRIVE_DIR_ID
             GAMES[game_id] = Game(
                 question, truth,
-                time_to_guess,
+                time_to_guess, time_to_vote,
                 game_id, SECRET_PREFIX,
-                BUCKET_DIR_NAME,
-                DRIVE_DIR_ID,
+                bucket_dir_name,
+                drive_dir_id,
                 LOCAL_DIR_PATH,
                 slack_client,
                 bucket,

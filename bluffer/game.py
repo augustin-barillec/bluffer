@@ -15,7 +15,7 @@ from bluffer.utils import *
 class Game:
     def __init__(self,
                  question, truth,
-                 time_to_guess,
+                 time_to_guess, time_to_vote,
                  game_id, secret_prefix,
                  bucket_dir_name,
                  drive_dir_id,
@@ -27,7 +27,7 @@ class Game:
         self.question = question
         self.truth = truth
         self.time_to_guess = time_to_guess
-        self.time_to_vote = 600
+        self.time_to_vote = time_to_vote
         self.id = game_id
         self.secret_prefix = secret_prefix
         self.bucket_dir_name = bucket_dir_name
@@ -127,7 +127,6 @@ class Game:
                     blocks.build_pre_vote_stage_block()
                 self.stage = 'pre_vote_stage'
                 self.update_board('all')
-                return 'sleep'
             return 'sleep'
 
         if self.stage == 'pre_vote_stage':
@@ -152,7 +151,6 @@ class Game:
                     blocks.build_pre_results_stage_block()
                 self.stage = 'pre_results_stage'
                 self.update_board('all')
-                return 'sleep'
             return 'sleep'
 
         if self.stage == 'pre_results_stage':
@@ -699,9 +697,9 @@ class Game:
         pdf.write(8, title)
         pdf.write(8, '\n\n')
 
-        pdf.set_font(font_family, '', 28)
+        pdf.set_font(font_family, '', 24)
         pdf.write(11, self.question)
-        pdf.write(8, '\n\n')
+        pdf.write(11, '\n\n')
 
         pdf.set_font(font_family, '', 14)
         msg = ['Truth: {}'.format(self.truth),
@@ -714,22 +712,24 @@ class Game:
 
         pdf.output(self.report_local_path, 'F')
 
-    def upload_to_gs(self, local_file_path, kind):
-        assert kind in ('graph', 'report')
+    def upload_to_gs(self, local_file_path, sub_dir_name):
+        assert sub_dir_name in ('graphs', 'reports')
         basename = os.path.basename(local_file_path)
 
-        blob = self.bucket.blob(
-            '{}/{}/{}'.format(self.bucket_dir_name, kind, basename))
+        blob_name = '{}/{}/{}'.format(
+            self.bucket_dir_name, sub_dir_name, basename)
+
+        blob = self.bucket.blob(blob_name)
 
         blob.upload_from_filename(local_file_path)
 
         return blob.public_url
 
     def upload_graph_to_gs(self):
-        return self.upload_to_gs(self.graph_local_path, 'graph')
+        return self.upload_to_gs(self.graph_local_path, 'graphs')
 
     def upload_report_to_gs(self):
-        return self.upload_to_gs(self.report_local_path, 'report')
+        return self.upload_to_gs(self.report_local_path, 'reports')
 
     def upload_report_to_drive(self):
 
@@ -743,7 +743,7 @@ class Game:
 
     def compute_basename(self, core_name, ext):
         return '{}_{}_{}.{}'.format(
-                    self.start_datetime.strftime('%Y%m%d%H%M%S'),
+                    self.start_datetime.strftime('%Y%m%d_%H%M%S'),
                     core_name, self.id, ext)
 
     def compute_graph_basename(self):

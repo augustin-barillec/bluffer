@@ -48,15 +48,12 @@ def open_game_setup_view(slack_client, trigger_id, secret_prefix, game_id):
     open_view(slack_client, trigger_id, game_setup_view)
 
 
-def collect_game_setup(game_setup_view, debug):
+def collect_game_setup(game_setup_view):
     values = game_setup_view['state']['values']
     question = values['question']['question']['value']
     truth = values['truth']['truth']['value']
-    if not debug:
-        time_to_guess = int((values['time_to_guess']['time_to_guess']
-                                   ['selected_option']['value']))*60
-    else:
-        time_to_guess = 40
+    time_to_guess = int((values['time_to_guess']['time_to_guess']
+                               ['selected_option']['value']))*60
     return question, truth, time_to_guess
 
 
