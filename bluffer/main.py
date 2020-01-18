@@ -20,7 +20,7 @@ with open(args.conf_path) as f:
     conf = yaml.safe_load(f)
 
 BOT_TOKEN = conf['bot_token']
-CREDENTIALS_PATH = conf['credentials_path']
+GOOGLE_CREDENTIALS_PATH = conf['google_credentials_path']
 SECRET_PREFIX = conf['secret_prefix']
 PORT = conf['port']
 BUCKET_NAME = conf['bucket_name']
@@ -35,7 +35,7 @@ DEBUG_DRIVE_DIR_ID = conf['debug_drive_dir_id']
 
 slack_client = SlackClient(token=BOT_TOKEN)
 google_credentials = service_account.Credentials.from_service_account_file(
-    CREDENTIALS_PATH)
+    GOOGLE_CREDENTIALS_PATH)
 storage_client = storage.Client(credentials=google_credentials)
 bucket = storage_client.bucket(BUCKET_NAME)
 drive_service = discovery.build('drive', 'v3', credentials=google_credentials)
