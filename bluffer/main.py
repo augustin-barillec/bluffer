@@ -5,6 +5,7 @@ import json
 import yaml
 from flask import Flask, Response, request, make_response
 from slackclient import SlackClient
+from google.oauth2 import service_account
 from google.cloud import storage
 from apiclient import discovery
 from bluffer.game import Game
@@ -19,8 +20,9 @@ with open(args.conf_path) as f:
     conf = yaml.safe_load(f)
 
 BOT_TOKEN = conf['bot_token']
-PORT = conf['port']
+CREDENTIALS_PATH = conf['credentials_path']
 SECRET_PREFIX = conf['secret_prefix']
+PORT = conf['port']
 BUCKET_NAME = conf['bucket_name']
 BUCKET_DIR_NAME = conf['bucket_dir_name']
 DRIVE_DIR_ID = conf['drive_dir_id']
@@ -32,9 +34,11 @@ DEBUG_DRIVE_DIR_ID = conf['debug_drive_dir_id']
 
 
 slack_client = SlackClient(token=BOT_TOKEN)
-storage_client = storage.Client()
+google_credentials = service_account.Credentials.from_service_account_file(
+    CREDENTIALS_PATH)
+storage_client = storage.Client(credentials=google_credentials)
 bucket = storage_client.bucket(BUCKET_NAME)
-drive_service = discovery.build('drive', 'v3')
+drive_service = discovery.build('drive', 'v3', credentials=google_credentials)
 
 app = Flask(__name__)
 
