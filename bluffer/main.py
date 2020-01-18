@@ -64,8 +64,8 @@ def command():
     organizer_id = request.form['user_id']
     trigger_id = request.form['trigger_id']
 
-    if len(GAMES) >= 3:
-        msg = ('There are too many (more than 3) games '
+    if len(GAMES) > 2:
+        msg = ('There are too many (more than 2) games '
                'running!')
         views.open_exception_view(slack_client, trigger_id, msg)
         return make_response('', 200)
