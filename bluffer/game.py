@@ -137,9 +137,9 @@ class Game:
             self.vote_button_block = self.build_vote_button_block()
             self.vote_deadline = timer.compute_deadline(
                 datetime.now(), self.time_to_vote)
-            self.send_vote_reminders()
             self.stage = 'vote_stage'
             self.update_board('all')
+            self.send_vote_reminders()
             return
 
         if self.stage == 'vote_stage':
@@ -176,6 +176,7 @@ class Game:
                 self.graph_block = self.build_graph_block()
             self.stage = 'results_stage'
             self.update_board('all')
+            self.send_game_over_notifications()
             return
 
         if self.stage == 'results_stage':
@@ -526,10 +527,20 @@ class Game:
     def send_vote_reminders(self):
         for u in self.guessers:
             msg = ("Hey {}, you can now vote in the bluffer game organized "
-                   "by {}. You have {} left. Will you find the truth? :mag:"
+                   "by {}. You have {} left."
                    .format(ids.user_display(u),
                            ids.user_display(self.organizer_id),
                            timer.build_time_display(self.time_to_vote)))
+            self.slack_client.api_call(
+                'chat.postEphemeral',
+                channel=self.channel_id,
+                user=u,
+                text=msg)
+
+    def send_game_over_notifications(self):
+        for u in self.guessers:
+            msg = ("The bluffer game organized by {} is over!"
+                   .format(ids.user_display(self.organizer_id)))
             self.slack_client.api_call(
                 'chat.postEphemeral',
                 channel=self.channel_id,

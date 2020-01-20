@@ -30,7 +30,6 @@ LOCAL_DIR_PATH = conf['local_dir_path']
 DEBUG = conf['debug']
 DEBUG_TIME_TO_GUESS = conf['debug_time_to_guess']
 DEBUG_TIME_TO_VOTE = conf['debug_time_to_vote']
-DEBUG_DRIVE_DIR_ID = conf['debug_drive_dir_id']
 
 
 slack_client = SlackClient(token=BOT_TOKEN)
@@ -117,18 +116,16 @@ def message_actions():
             if not DEBUG:
                 time_to_vote = 600
                 bucket_dir_name = BUCKET_DIR_NAME
-                drive_dir_id = DRIVE_DIR_ID
             else:
                 time_to_guess = DEBUG_TIME_TO_GUESS
                 time_to_vote = DEBUG_TIME_TO_VOTE
                 bucket_dir_name = 'test_' + BUCKET_DIR_NAME
-                drive_dir_id = DEBUG_DRIVE_DIR_ID
             GAMES[game_id] = Game(
                 question, truth,
                 time_to_guess, time_to_vote,
                 game_id, SECRET_PREFIX,
                 bucket_dir_name,
-                drive_dir_id,
+                DRIVE_DIR_ID,
                 LOCAL_DIR_PATH,
                 slack_client,
                 bucket,
