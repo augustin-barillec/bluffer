@@ -464,16 +464,21 @@ class Game:
         res = deepcopy(views.vote_view_template)
         res['callback_id'] = self.vote_view_id
         input_block_template = res['blocks'][0]
+        votable_proposals_msg = ['Voting options:']
         option_template = input_block_template['element']['options'][0]
         vote_options = []
-        for index, guess in self.build_votable_proposals(voter):
+        for index, proposal in self.build_votable_proposals(voter):
+            votable_proposals_msg.append('{}) {}'.format(index, proposal))
             vote_option = deepcopy(option_template)
-            vote_option['text']['text'] = '{}) {}'.format(index, guess)
+            vote_option['text']['text'] = '{}'.format(index)
             vote_option['value'] = '{}'.format(index)
             vote_options.append(vote_option)
+        votable_proposals_msg = '\n'.join(votable_proposals_msg)
         input_block = input_block_template
         input_block['element']['options'] = vote_options
-        res['blocks'] = [self.build_own_guess_block(voter), input_block]
+        res['blocks'] = [self.build_own_guess_block(voter),
+                         blocks.build_text_block(votable_proposals_msg),
+                         input_block]
         return res
 
     @property
