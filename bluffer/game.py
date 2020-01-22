@@ -421,7 +421,7 @@ class Game:
                     msg += ' :)'
                 return msg
             else:
-                msg = 'Hey {}, at least you voted! :grimacing:'.format(g)
+                msg = 'Hey {}, at least you voted!'.format(g)
                 if fmt == 'slack':
                     msg += ' :grimacing:'
                 else:
