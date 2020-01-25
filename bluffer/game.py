@@ -73,8 +73,8 @@ class Game:
         self.vote_button_block = None
         self.anonymous_proposals_block = None
         self.truth_block = None
-        self.results_block = None
-        self.winners_block = None
+        self.signed_guesses_block = None
+        self.conclusion_block = None
         self.graph_block = None
 
         self.guess_view = None
@@ -109,11 +109,11 @@ class Game:
             self.question_block = blocks.build_text_block(self.question)
             self.guess_button_block = self.build_guess_button_block()
             self.guess_view = self.build_guess_view()
+            self.potential_guessers = members.get_potential_guessers(
+                self.slack_client, self.channel_id, self.organizer_id)
             self.start_datetime = datetime.now()
             self.guess_deadline = timer.compute_deadline(
                 self.start_datetime, self.time_to_guess)
-            self.potential_guessers = members.get_potential_guessers(
-                self.slack_client, self.channel_id, self.organizer_id)
             self.stage = 'guess_stage'
             self.update_board('all')
             return
@@ -130,10 +130,10 @@ class Game:
             return 'sleep'
 
         if self.stage == 'pre_vote_stage':
-            self.vote_view_id = self.build_vote_view_id()
             self.signed_proposals = self.build_signed_proposals()
             self.anonymous_proposals_block = \
                 self.build_anonymous_proposals_block()
+            self.vote_view_id = self.build_vote_view_id()
             self.vote_button_block = self.build_vote_button_block()
             self.vote_deadline = timer.compute_deadline(
                 datetime.now(), self.time_to_vote)
@@ -155,10 +155,12 @@ class Game:
 
         if self.stage == 'pre_results_stage':
             self.truth_index = self.compute_truth_index()
-            self.results = self.build_results()
             self.truth_block = self.build_truth_block()
-            self.results_block = self.build_results_block()
-            if self.guessers:
+            lg = len(self.guessers)
+            if lg > 0:
+                self.results = self.build_results()
+                self.signed_guesses_block = self.build_signed_guesses_block()
+            if lg > 1:
                 self.max_score = self.compute_max_score()
                 self.winners = self.compute_winners()
                 self.graph = self.build_graph()
@@ -172,8 +174,8 @@ class Game:
                 self.report_url = self.upload_report_to_gs()
                 self.upload_report_to_drive()
                 self.delete_local_files()
-                self.winners_block = self.build_winners_block()
                 self.graph_block = self.build_graph_block()
+            self.conclusion_block = self.build_conclusion_block()
             self.stage = 'results_stage'
             self.update_board('all')
             self.send_game_over_notifications()
@@ -233,29 +235,29 @@ class Game:
                     self.vote_button_block]
 
         if self.stage == 'pre_results_stage':
-            return [blocks.divider_block,
-                    self.title_block,
-                    self.question_block,
-                    self.anonymous_proposals_block,
-                    self.guessers_block,
-                    self.voters_block,
-                    self.pre_results_stage_block]
+            lg = len(self.guessers)
+            res = [blocks.divider_block,
+                   self.title_block,
+                   self.question_block]
+            if lg > 0:
+                res.append(self.anonymous_proposals_block)
+            if lg > 1:
+                res += [self.guessers_block, self.voters_block]
+            res.append(self.pre_results_stage_block)
+            return res
 
         if self.stage == 'results_stage':
-            if not self.guessers:
-                return [blocks.divider_block,
-                        self.title_block,
-                        self.question_block,
-                        self.truth_block,
-                        self.results_block]
-            else:
-                return [blocks.divider_block,
-                        self.title_block,
-                        self.question_block,
-                        self.truth_block,
-                        self.results_block,
-                        self.winners_block,
-                        self.graph_block]
+            lg = len(self.guessers)
+            res = [blocks.divider_block,
+                   self.title_block,
+                   self.question_block,
+                   self.truth_block]
+            if lg > 0:
+                res.append(self.signed_guesses_block)
+            if lg > 1:
+                res.append(self.graph_block)
+            res.append(self.conclusion_block)
+            return res
 
     @property
     def lower_board(self):
@@ -350,32 +352,28 @@ class Game:
         return blocks.build_text_block(msg)
 
     def build_truth_block(self):
-        index = self.truth_index
-        msg = '• Truth: {}) {}'.format(index, self.truth)
+        msg = '• Truth: '
+        if len(self.guessers) == 0:
+            msg += '{}'.format(self.truth)
+        else:
+            index = self.truth_index
+            msg += '{}) {}'.format(index, self.truth)
         return blocks.build_text_block(msg)
 
-    def build_results_block(self):
-        msg = self.build_results_msg('slack')
+    def build_signed_guesses_block(self):
+        msg = self.build_signed_guesses_msg('slack')
         return blocks.build_text_block(msg)
 
-    def build_winners_block(self):
-        msg = self.build_winners_msg('slack')
+    def build_conclusion_block(self):
+        msg = self.build_conclusion_msg('slack')
         return blocks.build_text_block(msg)
 
     def build_graph_block(self):
         return blocks.build_image_block(url=self.graph_url,
                                         alt_text='Voting graph')
 
-    def build_results_msg(self, fmt):
+    def build_signed_guesses_msg(self, fmt):
         assert fmt in ('slack', 'pdf')
-        if not self.guessers:
-            res = 'No one played this game'
-            if fmt == 'slack':
-                res += ' :sob:.'
-                return res
-            else:
-                res += ' :/.'
-                return res
         msg = []
         for r in deepcopy(self.results):
             if fmt == 'slack':
@@ -384,17 +382,21 @@ class Game:
                 player = r['guesser_name']
             index = r['index']
             guess = r['guess']
-            score = r['score']
-            p = r['p']
-            r_msg = '• {} wrote {}) {} and scores {} {}.'.format(
-                player, index, guess, score, p)
+            r_msg = '• {}: {}) {}'.format(player, index, guess)
             msg.append(r_msg)
         msg = '\n'.join(msg)
         return msg
 
-    def build_winners_msg(self, fmt):
+    def build_conclusion_msg(self, fmt):
         assert fmt in ('slack', 'pdf')
-        if not self.voters:
+        lg = len(self.guessers)
+        lv = len(self.voters)
+        if lg == 0:
+            return 'No one played this game :sob:.'
+        if lg == 1:
+            g = ids.user_display(self.guessers[0])
+            return 'Thanks for your guess, {}!'.format(g)
+        if lv == 0:
             res = 'No one voted'
             if fmt == 'slack':
                 res += ' :sob:.'
@@ -402,17 +404,13 @@ class Game:
             else:
                 res += ' :/.'
                 return res
-        if len(self.voters) == 1:
+        if lv == 1:
             r = self.results[0]
             if fmt == 'slack':
                 g = ids.user_display(r['guesser'])
             else:
                 g = r['guesser_name']
             ca = r['chosen_author']
-            if set(self.guessers) == set(self.voters):
-                assert ca == 'Truth'
-                msg = ('Thank you {}!'.format(g))
-                return msg
             if ca == 'Truth':
                 msg = 'Bravo {}! You found the truth!'.format(g)
                 if fmt == 'slack':
@@ -429,12 +427,13 @@ class Game:
                 return msg
         if self.max_score == 0:
             return 'Zero points scored!'
-        if len(self.winners) == len(self.voters):
+        lw = len(self.winners)
+        if lw == lv:
             msg = "Well, it's a draw!"
             if fmt == 'slack':
                 msg += ' :scales:'
             return msg
-        if len(self.winners) == 1:
+        if lw == 1:
             if fmt == 'slack':
                 w = ids.user_display(self.winners[0])
                 emoji = ' :first_place_medal:'
@@ -442,7 +441,7 @@ class Game:
                 w = self.get_guesser_name(self.winners[0])
                 emoji = ''
             return 'And the winner is {}!{}'.format(w, emoji)
-        if len(self.winners) > 1:
+        if lw > 1:
             if fmt == 'slack':
                 ws = [ids.user_display(w) for w in self.winners]
                 emoji = ' :clap:'
@@ -531,8 +530,8 @@ class Game:
 
     def send_vote_reminders(self):
         for u in self.guessers:
-            msg = ("Hey {}, you can now vote in the bluffer game organized "
-                   "by {}. You have {} left."
+            msg = ('Hey {}, you can now vote in the bluffer game organized '
+                   'by {}'
                    .format(ids.user_display(u),
                            ids.user_display(self.organizer_id),
                            timer.build_time_display(self.time_to_vote)))
@@ -676,8 +675,9 @@ class Game:
         truth_label = {self.truth_index: '{}) Truth'.format(self.truth_index)}
         nx.draw_networkx_labels(g, pos, labels=truth_label, font_color='r')
 
-        guesser_labels = {r['index']: '{}) {}'.format(r['index'],
-                                                      r['guesser_name'])
+        guesser_labels = {r['index']: '{}) {}\n{}'.format(r['index'],
+                                                          r['guesser_name'],
+                                                          r['score'])
                           for r in self.results}
 
         indexes_of_winners = set(r['index'] for r in self.results
@@ -719,8 +719,8 @@ class Game:
 
         pdf.set_font(font_family, '', 14)
         msg = ['Truth: {}'.format(self.truth),
-               self.build_results_msg('pdf'),
-               self.build_winners_msg('pdf')]
+               self.build_signed_guesses_msg('pdf'),
+               self.build_conclusion_msg('pdf')]
 
         msg = '\n\n'.join(msg)
 
