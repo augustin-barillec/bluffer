@@ -99,7 +99,7 @@ class Game:
             if post_action == 'sleep':
                 delta = (end - start).total_seconds()
                 if delta < 5:
-                    time.sleep(5-delta)
+                    time.sleep(5 - delta)
 
     def update(self):
 
@@ -109,11 +109,11 @@ class Game:
             self.question_block = blocks.build_text_block(self.question)
             self.guess_button_block = self.build_guess_button_block()
             self.guess_view = self.build_guess_view()
-            self.potential_guessers = members.get_potential_guessers(
-                self.slack_client, self.channel_id, self.organizer_id)
             self.start_datetime = datetime.now()
             self.guess_deadline = timer.compute_deadline(
                 self.start_datetime, self.time_to_guess)
+            self.potential_guessers = members.get_potential_guessers(
+                self.slack_client, self.channel_id, self.organizer_id)
             self.stage = 'guess_stage'
             self.update_board('all')
             return
@@ -139,14 +139,16 @@ class Game:
                 datetime.now(), self.time_to_vote)
             self.stage = 'vote_stage'
             self.update_board('all')
-            self.send_vote_reminders()
+            if len(self.guessers) > 1:
+                self.send_vote_reminders()
             return
 
         if self.stage == 'vote_stage':
             self.update_board('lower')
             c1 = self.time_left_to_vote > 0
             c2 = self.remaining_potential_voters
-            if not(c1 and c2):
+            c3 = len(self.guessers) > 1
+            if not(c1 and c2 and c3):
                 self.pre_results_stage_block = \
                     blocks.build_pre_results_stage_block()
                 self.stage = 'pre_results_stage'
@@ -156,11 +158,9 @@ class Game:
         if self.stage == 'pre_results_stage':
             self.truth_index = self.compute_truth_index()
             self.truth_block = self.build_truth_block()
-            lg = len(self.guessers)
-            if lg > 0:
-                self.results = self.build_results()
-                self.signed_guesses_block = self.build_signed_guesses_block()
-            if lg > 1:
+            self.results = self.build_results()
+            self.signed_guesses_block = self.build_signed_guesses_block()
+            if len(self.guessers) > 1:
                 self.max_score = self.compute_max_score()
                 self.winners = self.compute_winners()
                 self.graph = self.build_graph()
@@ -276,6 +276,7 @@ class Game:
         if self.stage == 'vote_stage':
             return [self.vote_timer_block,
                     self.voters_block,
+                    self.remaining_potential_voters_block,
                     blocks.divider_block]
 
         if self.stage == 'pre_results_stage':
@@ -326,6 +327,12 @@ class Game:
             return blocks.build_text_block('No one has voted yet.')
         voters_for_display = ids.user_displays(self.voters)
         msg = 'Voters: {}'.format(voters_for_display)
+        return blocks.build_text_block(msg)
+
+    @property
+    def remaining_potential_voters_block(self):
+        rpv_for_display = ids.user_displays(self.remaining_potential_voters)
+        msg = 'Can vote: {}'.format(rpv_for_display)
         return blocks.build_text_block(msg)
 
     def build_guess_button_block(self):
@@ -618,7 +625,6 @@ class Game:
             r['guess'] = proposal
             if author not in self.voters:
                 r['score'] = 0
-                r['p'] = 'points'
                 results.append(r)
                 continue
             vote_index = self.votes[author]
@@ -628,10 +634,6 @@ class Game:
             r['truth_score'] = self.compute_truth_score(author)
             r['bluff_score'] = self.compute_bluff_score(author)
             r['score'] = r['truth_score'] + r['bluff_score']
-            if r['score'] == 1:
-                r['p'] = 'point'
-            else:
-                r['p'] = 'points'
             results.append(r)
 
         def sort_key(r_):
@@ -672,12 +674,11 @@ class Game:
 
         nx.draw_networkx_edges(g, pos, alpha=1.0, arrows=True, width=1.0)
 
-        truth_label = {self.truth_index: '{}) Truth'.format(self.truth_index)}
+        truth_label = {self.truth_index: 'Truth'}
         nx.draw_networkx_labels(g, pos, labels=truth_label, font_color='r')
 
-        guesser_labels = {r['index']: '{}) {}\n{}'.format(r['index'],
-                                                          r['guesser_name'],
-                                                          r['score'])
+        guesser_labels = {r['index']: '{}\n{}'.format(r['guesser_name'],
+                                                      r['score'])
                           for r in self.results}
 
         indexes_of_winners = set(r['index'] for r in self.results
