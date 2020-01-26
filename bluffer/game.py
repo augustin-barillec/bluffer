@@ -40,8 +40,7 @@ class Game:
         self.channel_id = ids.game_id_to_channel_id(game_id)
         self.organizer_id = ids.game_id_to_organizer_id(game_id)
 
-        self.title_block = blocks.build_text_block(
-            'Game set up by <@{}>!'.format(self.organizer_id))
+        self.title_block = blocks.build_title_block(self.organizer_id)
         self.pre_guess_stage_block = blocks.build_pre_guess_stage_block()
 
         self.stage = 'pre_guess_stage'
@@ -84,7 +83,6 @@ class Game:
         self.graph_local_path = None
         self.report_local_path = None
         self.graph_url = None
-        self.report_url = None
 
         self.thread_update_regularly = threading.Thread(
             target=self.update_regularly)
@@ -171,7 +169,7 @@ class Game:
                 self.draw_graph()
                 self.build_report()
                 self.graph_url = self.upload_graph_to_gs()
-                self.report_url = self.upload_report_to_gs()
+                self.upload_report_to_gs()
                 self.upload_report_to_drive()
                 self.delete_local_files()
                 self.graph_block = self.build_graph_block()
@@ -576,11 +574,6 @@ class Game:
             if author == author_:
                 return index
 
-    def index_to_proposal(self, index):
-        for index_, author, proposal in self.signed_proposals:
-            if index_ == index:
-                return proposal
-
     def author_to_proposal(self, author):
         for index_, author_, proposal in self.signed_proposals:
             if author_ == author:
@@ -631,7 +624,6 @@ class Game:
             vote_index = self.votes[author]
             r['vote_index'] = vote_index
             r['chosen_author'] = self.index_to_author(vote_index)
-            r['chosen_proposal'] = self.index_to_proposal(vote_index)
             r['truth_score'] = self.compute_truth_score(author)
             r['bluff_score'] = self.compute_bluff_score(author)
             r['score'] = r['truth_score'] + r['bluff_score']
