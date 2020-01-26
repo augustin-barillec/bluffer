@@ -231,7 +231,6 @@ class Game:
                     self.title_block,
                     self.question_block,
                     self.anonymous_proposals_block,
-                    self.guessers_block,
                     self.vote_button_block]
 
         if self.stage == 'pre_results_stage':
@@ -242,7 +241,8 @@ class Game:
             if lg > 0:
                 res.append(self.anonymous_proposals_block)
             if lg > 1:
-                res += [self.guessers_block, self.voters_block]
+                res += [self.remaining_potential_voters_block,
+                        self.voters_block]
             res.append(self.pre_results_stage_block)
             return res
 
@@ -275,8 +275,8 @@ class Game:
 
         if self.stage == 'vote_stage':
             return [self.vote_timer_block,
-                    self.voters_block,
                     self.remaining_potential_voters_block,
+                    self.voters_block,
                     blocks.divider_block]
 
         if self.stage == 'pre_results_stage':
@@ -331,8 +331,9 @@ class Game:
 
     @property
     def remaining_potential_voters_block(self):
-        rpv_for_display = ids.user_displays(self.remaining_potential_voters)
-        msg = 'Can vote: {}'.format(rpv_for_display)
+        rpv_for_display = ids.user_displays(
+            sorted(self.remaining_potential_voters))
+        msg = 'Potential voters: {}'.format(rpv_for_display)
         return blocks.build_text_block(msg)
 
     def build_guess_button_block(self):
@@ -355,7 +356,7 @@ class Game:
     def build_own_guess_block(self, voter):
         index = self.author_to_index(voter)
         guess = self.author_to_proposal(voter)
-        msg = 'Your guess is: {}) {}'.format(index, guess)
+        msg = 'Your guess: {}) {}'.format(index, guess)
         return blocks.build_text_block(msg)
 
     def build_truth_block(self):
@@ -538,7 +539,7 @@ class Game:
     def send_vote_reminders(self):
         for u in self.guessers:
             msg = ('Hey {}, you can now vote in the bluffer game organized '
-                   'by {}'
+                   'by {}.'
                    .format(ids.user_display(u),
                            ids.user_display(self.organizer_id),
                            timer.build_time_display(self.time_to_vote)))

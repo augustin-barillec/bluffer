@@ -113,6 +113,19 @@ def message_actions():
         if view_callback_id.startswith(SECRET_PREFIX + '#game_setup_view'):
             question, truth, time_to_guess = \
                 views.collect_game_setup(view)
+
+            if len(GAMES) >= 3:
+                msg = ('Question: {}\n\n'
+                       'Answer: {}\n\n'
+                       'Time to guess: {}\n\n'
+                       'There are already 3 games running! '
+                       'This is the maximal number allowed.'.format(
+                        question, truth, time_to_guess))
+                exception_view_response = views.build_exception_view_response(
+                    msg)
+                return Response(json.dumps(exception_view_response),
+                                mimetype='application/json',
+                                status=200)
             if not DEBUG:
                 time_to_vote = 600
                 bucket_dir_name = BUCKET_DIR_NAME
@@ -141,19 +154,22 @@ def message_actions():
                             status=200)
 
         if view_callback_id.startswith(SECRET_PREFIX + '#guess_view'):
+            guess = views.collect_guess(view)
             if game.time_left_to_guess < 0:
-                msg = ('Your guess will not be taken into account '
-                       'because the guessing deadline has passed!')
+                msg = ('Your guess: {}\n\n'
+                       'It will not be taken into account '
+                       'because the guessing deadline '
+                       'has passed!'.format(guess))
                 exception_view_response = (
                     views.build_exception_view_response(msg))
                 return Response(json.dumps(exception_view_response),
                                 mimetype='application/json',
                                 status=200)
-            guess = views.collect_guess(view)
             if len(game.guessers) >= 80:
-                msg = ('Your guess will not be taken into account '
-                       'because there are already 80 guessers. This '
-                       'is the maximal number allowed.')
+                msg = ('Your guess: {}\n\n'
+                       'It will not be taken into account '
+                       'because there are already 80 guessers. '
+                       'This is the maximal number allowed.'.format(guess))
                 exception_view_response = (
                     views.build_exception_view_response(msg))
                 return Response(json.dumps(exception_view_response),
@@ -164,15 +180,16 @@ def message_actions():
             return make_response('', 200)
 
         if view_callback_id.startswith(SECRET_PREFIX + '#vote_view'):
+            vote = views.collect_vote(view)
             if game.time_left_to_vote < 0:
-                msg = ('Your vote will not be taken into account '
-                       'because the voting deadline has passed!')
+                msg = ('Your vote: proposal {}.\n\n'
+                       'It will not be taken into account '
+                       'because the voting deadline has passed!'.format(vote))
                 exception_view_response = (
                     views.build_exception_view_response(msg))
                 return Response(json.dumps(exception_view_response),
                                 mimetype='application/json',
                                 status=200)
-            vote = views.collect_vote(view)
             game.votes[user_id] = vote
             game.update_board('lower')
             return make_response('', 200)
@@ -204,6 +221,11 @@ def message_actions():
             if user_id not in game.potential_guessers:
                 msg = ('You cannot guess because when the set up of this '
                        'game started, you were not a member of this channel.')
+                views.open_exception_view(slack_client, trigger_id, msg)
+                return make_response('', 200)
+            if len(game.guessers) >= 80:
+                msg = ('You cannot guess because there are already 80 '
+                       'guessers. This is the maximal number allowed.')
                 views.open_exception_view(slack_client, trigger_id, msg)
                 return make_response('', 200)
             if user_id == 'Truth':
