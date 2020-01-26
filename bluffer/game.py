@@ -329,6 +329,8 @@ class Game:
 
     @property
     def remaining_potential_voters_block(self):
+        if not self.remaining_potential_voters:
+            return blocks.build_text_block('Everyone has voted!')
         rpv_for_display = ids.user_displays(
             sorted(self.remaining_potential_voters))
         msg = 'Potential voters: {}'.format(rpv_for_display)
@@ -537,7 +539,7 @@ class Game:
     def send_vote_reminders(self):
         for u in self.guessers:
             msg = ('Hey {}, you can now vote in the bluffer game organized '
-                   'by {}.'
+                   'by {}!'
                    .format(ids.user_display(u),
                            ids.user_display(self.organizer_id),
                            timer.build_time_display(self.time_to_vote)))
