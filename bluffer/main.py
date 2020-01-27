@@ -120,7 +120,8 @@ def message_actions():
                        'Time to guess: {}\n\n'
                        'There are already 3 games running! '
                        'This is the maximal number allowed.'.format(
-                        question, truth, time_to_guess))
+                        question, truth,
+                        timer.build_time_display(time_to_guess)))
                 exception_view_response = views.build_exception_view_response(
                     msg)
                 return Response(json.dumps(exception_view_response),
