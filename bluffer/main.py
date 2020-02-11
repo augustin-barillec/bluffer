@@ -1,5 +1,6 @@
 import time
 import threading
+import logging
 import argparse
 import json
 import yaml
@@ -10,6 +11,10 @@ from google.cloud import storage
 from apiclient import discovery
 from bluffer.game import Game
 from bluffer.utils import *
+
+logging.basicConfig(format='%(asctime)s %(levelname)s %(message)s',
+                    level=logging.INFO)
+logger = logging.getLogger()
 
 
 parser = argparse.ArgumentParser()

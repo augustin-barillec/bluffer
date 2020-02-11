@@ -1,6 +1,7 @@
 import time
 import os
 import threading
+import logging
 import random
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -10,6 +11,9 @@ from copy import deepcopy
 from fpdf import FPDF
 from apiclient import http
 from bluffer.utils import *
+
+
+logger = logging.getLogger(__name__)
 
 
 class Game:
@@ -157,6 +161,7 @@ class Game:
             self.truth_index = self.compute_truth_index()
             self.truth_block = self.build_truth_block()
             self.results = self.build_results()
+            logger.info(str(self.results))
             self.signed_guesses_block = self.build_signed_guesses_block()
             if len(self.guessers) > 1:
                 self.max_score = self.compute_max_score()
@@ -167,11 +172,15 @@ class Game:
                 self.report_basename = self.compute_report_basename()
                 self.report_local_path = self.compute_report_local_path()
                 self.draw_graph()
-                self.build_report()
                 self.graph_url = self.upload_graph_to_gs()
-                self.upload_report_to_gs()
-                self.upload_report_to_drive()
-                self.delete_local_files()
+                try:
+                    self.build_report()
+                    self.upload_report_to_gs()
+                    self.upload_report_to_drive()
+                    os.remove(self.report_local_path)
+                except IndexError:
+                    logger.warning('Unable to build report')
+                os.remove(self.graph_local_path)
                 self.graph_block = self.build_graph_block()
             self.conclusion_block = self.build_conclusion_block()
             self.stage = 'results_stage'
@@ -772,7 +781,3 @@ class Game:
 
     def compute_report_local_path(self):
         return self.compute_local_path(self.report_basename)
-
-    def delete_local_files(self):
-        os.remove(self.graph_local_path)
-        os.remove(self.report_local_path)
