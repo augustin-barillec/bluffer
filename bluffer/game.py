@@ -392,6 +392,7 @@ class Game:
     def build_signed_guesses_msg(self, fmt):
         assert fmt in ('slack', 'pdf')
         msg = []
+        lg = len(self.guessers)
         for r in deepcopy(self.results):
             if fmt == 'slack':
                 player = ids.user_display(r['guesser'])
@@ -401,8 +402,11 @@ class Game:
             p = r['p']
             index = r['index']
             guess = r['guess']
-            r_msg = '• {} [{} {}]: {}) {}'.format(
-                player, score, p, index, guess)
+            if lg > 1:
+                r_msg = '• {} [{} {}]: {}) {}'.format(
+                    player, score, p, index, guess)
+            else:
+                r_msg = '• {}: {}) {}'.format(player, index, guess)
             msg.append(r_msg)
         msg = '\n'.join(msg)
         return msg
@@ -633,6 +637,7 @@ class Game:
             r['guess'] = proposal
             if author not in self.voters:
                 r['score'] = 0
+                r['p'] = 'points'
                 results.append(r)
                 continue
             vote_index = self.votes[author]
