@@ -1,21 +1,5 @@
 from bluffer.utils import *
 
-
-def game_db_to_game_dict(team_id, game_id):
-    return None
-
-
-def game_dict_to_game_instance(game_dict):
-    return None
-
-
-def game_instance_to_game_dict(game_instance):
-    return None
-
-
-def game_dict_to_game_db(game_dict):
-    return None
-
 def slack_command(request):
     open_guess_set_up_view()
 
@@ -33,8 +17,7 @@ def pre_guess_stage(request):
     title_block = blocks.build_title_block(organizer_id)
     pre_guess_stage_block = blocks.build_pre_guess_stage_block()
 
-    upper_blocks = [title_block]
-    middle_blocks = [pre_guess_stage_block]
+    upper_blocks = [title_block, pre_guess_stage_block]
     lower_blocks = [blocks.divider_block]
 
     upper_ts = slack_client.api_call(
@@ -44,7 +27,7 @@ def pre_guess_stage(request):
     lower_ts = slack_client.api_call(
         'chat.postMessage',
         channel=channel_id,
-        blocks=upper_blocks)['ts']
+        blocks=lower_blocks)['ts']
 
     game_dict['upper_ts'] = upper_ts
     game_dict['lower_ts'] = lower_ts
@@ -71,7 +54,6 @@ def pre_guess_stage(request):
     trigger(guess_stage, game_id)
 
     return
-
 
 def guess_stage(request):
 
@@ -120,8 +102,7 @@ def guess_stage(request):
           blocks=[time_left_to_guess_block, guessers_block])
       time.sleep(2)
 
-
-def preparing_vote_stage(request):
+def pre_vote_stage(request):
     game_id = context['game_id']
     team_id = ids.game_id_to_team_id(game_id)
     organizer_id = ids.game_id_to_organizer_id(game_id)
@@ -151,9 +132,6 @@ def preparing_vote_stage(request):
         self.send_vote_reminders()
 
     trigger_vote_stage
-
-
-
 
 def vote_stage(request):
     start_process_datetime = datetime.now()
@@ -224,4 +202,3 @@ def results_stage(request):
     delete_in_db
     self.send_game_over_notifications()
 
-def guess_button_
