@@ -1,0 +1,3 @@
+-r requirements.txt
+functions-framework==1.2.0
+

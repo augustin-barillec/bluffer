@@ -8,3 +8,5 @@ bluffer/fonts/*.pkl
 build
 dist
 
+venv
+
