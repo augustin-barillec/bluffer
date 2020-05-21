@@ -17,7 +17,7 @@ game = {
     'upper_ts': '1487598622',
     'lower_ts': '1477889966',
     'start_guess_datetime': '2020-03-05 19:50:01',
-    'potential_players': ['u1', 'u2', 'u3', 'u4', 'u5']
+    'potential_guessers': {'u1': 'n1', 'u2': 'n2', 'u3': 'n3'}
 }
 
 # => guess stage
@@ -30,12 +30,8 @@ game = {
     'upper_ts': '1487598622',
     'lower_ts': '1477889966',
     'start_guess_datetime': '2020-03-05 19:50:01',
-    'potential_players': ['u1', 'u2', 'u3', 'u4', 'u5'],
-    'players': {
-        'u1': {'name': 'n1', 'guess': 'guess1'},
-        'u2': {'name': 'n2', 'guess': 'guess2'},
-        'u3': {'name': 'n3', 'guess': 'guess3'}
-    }
+    'potential_guessers': {'u1': 'n1', 'u2': 'n2', 'u3': 'n3'},
+    'guessers': {'u1': 'guess1', 'u2': 'guess2'}
 }
 
 # pre_vote stage
@@ -49,17 +45,14 @@ game = {
     'lower_ts': '1477889966',
     'start_guess_datetime': '2020-03-05 19:50:01',
     'start_vote_datetime': '2020-03-05 19:57:01',
-    'potential_players': ['u1', 'u2', 'u3', 'u4', 'u5'],
-    'players': {
-        'u1': {'name': 'n1', 'guess': 'guess1'},
-        'u2': {'name': 'n2', 'guess': 'guess2'},
-        'u3': {'name': 'n3', 'guess': 'guess3'}
-    }
+    'potential_guessers': {'u1': 'n1', 'u2': 'n2', 'u3': 'n3'},
+    'guessers': {'u1': 'guess1', 'u2': 'guess2'},
+    'order': ['u2', 'Truth', 'u1']
 }
 
 # vote stage
 
-pre_results_stage_game = {
+game = {
     'question': '?',
     'truth': '!',
     'time_to_guess': 60,
@@ -68,17 +61,15 @@ pre_results_stage_game = {
     'lower_ts': '1477889966',
     'start_guess_datetime': '2020-03-05 19:50:01',
     'start_vote_datetime': '2020-03-05 19:57:01',
-    'potential_players': ['u1', 'u2', 'u3', 'u4', 'u5'],
-    'players': {
-        'u1': {'name': 'n1', 'guess': 'guess1', 'vote': 2},
-        'u2': {'name': 'n2', 'guess': 'guess2', 'vote': 3},
-        'u3': {'name': 'n3', 'guess': 'guess3', 'vote': 4}
-    }
+    'potential_guessers': {'u1': 'n1', 'u2': 'n2', 'u3': 'n3'},
+    'guessers': {'u1': 'guess1', 'u2': 'guess2'},
+    'order': ['u2', 'Truth', 'u1'],
+    'voters': {'u2': 1}
 }
 
 # results stage
 
-results_stage_game = {
+game = {
     'question': '?',
     'truth': '!',
     'time_to_guess': 60,
@@ -87,11 +78,9 @@ results_stage_game = {
     'lower_ts': '1477889966',
     'start_guess_datetime': '2020-03-05 19:50:01',
     'start_vote_datetime': '2020-03-05 19:57:01',
-    'potential_players': ['u1', 'u2', 'u3', 'u4', 'u5'],
-    'players': {
-        'u1': {'name': 'n1', 'guess': 'guess1', 'vote': 2},
-        'u2': {'name': 'n2', 'guess': 'guess2', 'vote': 3},
-        'u3': {'name': 'n3', 'guess': 'guess3', 'vote': 4}
-    }
+    'potential_guessers': {'u1': 'n1', 'u2': 'n2', 'u3': 'n3'},
+    'guessers': {'u1': 'guess1', 'u2': 'guess2'},
+    'order': ['u2', 'Truth', 'u1'],
+    'voters': {'u2': 1}
 }
 

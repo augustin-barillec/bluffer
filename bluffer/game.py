@@ -392,14 +392,21 @@ class Game:
     def build_signed_guesses_msg(self, fmt):
         assert fmt in ('slack', 'pdf')
         msg = []
+        lg = len(self.guessers)
         for r in deepcopy(self.results):
             if fmt == 'slack':
                 player = ids.user_display(r['guesser'])
             else:
                 player = r['guesser_name']
+            score = r['score']
+            p = r['p']
             index = r['index']
             guess = r['guess']
-            r_msg = '• {}: {}) {}'.format(player, index, guess)
+            if lg > 1:
+                r_msg = '• {} [{} {}]: {}) {}'.format(
+                    player, score, p, index, guess)
+            else:
+                r_msg = '• {}: {}) {}'.format(player, index, guess)
             msg.append(r_msg)
         msg = '\n'.join(msg)
         return msg
@@ -630,6 +637,7 @@ class Game:
             r['guess'] = proposal
             if author not in self.voters:
                 r['score'] = 0
+                r['p'] = 'points'
                 results.append(r)
                 continue
             vote_index = self.votes[author]
@@ -638,6 +646,10 @@ class Game:
             r['truth_score'] = self.compute_truth_score(author)
             r['bluff_score'] = self.compute_bluff_score(author)
             r['score'] = r['truth_score'] + r['bluff_score']
+            if r['score'] == 1:
+                r['p'] = 'point'
+            else:
+                r['p'] = 'points'
             results.append(r)
 
         def sort_key(r_):
@@ -681,8 +693,7 @@ class Game:
         truth_label = {self.truth_index: 'Truth'}
         nx.draw_networkx_labels(g, pos, labels=truth_label, font_color='r')
 
-        guesser_labels = {r['index']: '{}\n{}'.format(r['guesser_name'],
-                                                      r['score'])
+        guesser_labels = {r['index']: '{}'.format(r['guesser_name'])
                           for r in self.results}
 
         indexes_of_winners = set(r['index'] for r in self.results

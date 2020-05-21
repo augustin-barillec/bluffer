@@ -1,9 +1,6 @@
-import os
-import sys
 import base64
 import time
 
-sys.path = [os.path.realpath('..')] + sys.path
 
 import json
 from flask import Flask, Response, make_response
@@ -18,7 +15,7 @@ publisher = pubsub_v1.PublisherClient()
 
 SECRET_PREFIX = 'secret_prefix'
 
-project_id = 'project-20190222'
+project_id = 'project-20190222-269014'
 
 
 def team_id_to_team_ref(db, team_id):
@@ -113,8 +110,7 @@ def message_actions(request):
             game_ref.set(game)
 
             topic_path = publisher.topic_path(
-                'toto',
-                'pre_guess_stage_topic')
+                project_id, 'pre_guess_stage_topic')
 
             data = game_id.encode("utf-8")
 
@@ -190,9 +186,7 @@ def pre_guess_stage(event, context):
         ts=lower_ts,
         blocks=[guess_timer_block, guessers_block])
 
-    topic_path = publisher.topic_path(
-        'toto',
-        'guess_stage_topic')
+    topic_path = publisher.topic_path(project_id, 'guess_stage_topic')
 
     data = game_id.encode("utf-8")
 
@@ -247,7 +241,7 @@ def guess_stage(event, context):
                 blocks=[blocks.divider_block])
 
             topic_path = publisher.topic_path(
-                'toto',
+                project_id,
                 'pre_vote_stage_topic')
 
             data = game_id.encode("utf-8")
@@ -257,9 +251,7 @@ def guess_stage(event, context):
 
         if int((datetime.now() - start_call_datetime).total_seconds()) > 60:
 
-            topic_path = publisher.topic_path(
-                'toto',
-                'guess_stage_topic')
+            topic_path = publisher.topic_path(project_id, 'guess_stage_topic')
 
             data = game_id.encode("utf-8")
 
@@ -283,5 +275,11 @@ def pre_vote_stage(event, context):
 
     print(guessers)
     return make_response('', 200)
-    
 
+
+def vote_stage(event, context):
+    return make_response('', 200)
+
+
+def result_stage(event, context):
+    return make_response('', 200)

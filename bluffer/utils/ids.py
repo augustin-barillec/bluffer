@@ -15,10 +15,6 @@ def game_id_to_ids(game_id):
     return game_id.split('&')
 
 
-def game_id_to_team_id(game_id):
-    return game_id_to_ids(game_id)[0]
-
-
 def game_id_to_channel_id(game_id):
     return game_id_to_ids(game_id)[1]
 
