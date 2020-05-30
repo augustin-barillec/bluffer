@@ -1,7 +1,6 @@
+import os
 import base64
 import time
-
-
 import json
 from flask import Flask, Response, make_response
 from google.cloud import pubsub_v1
@@ -15,7 +14,9 @@ publisher = pubsub_v1.PublisherClient()
 
 SECRET_PREFIX = 'secret_prefix'
 
-project_id = 'project-20190222-269014'
+dir_path = os.path.realpath(os.path.dirname(__file__))
+with open(os.path.join(dir_path, 'project_id.txt')) as f:
+    project_id = list(f)[0]
 
 
 def team_id_to_team_ref(db, team_id):

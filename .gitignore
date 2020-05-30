@@ -10,3 +10,5 @@ dist
 
 venv
 
+dev/credentials.json
+dev/ngrok
