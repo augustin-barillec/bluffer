@@ -12,3 +12,5 @@ venv
 
 dev/credentials.json
 dev/ngrok
+
+project_id.txt

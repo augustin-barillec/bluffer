@@ -4,7 +4,7 @@ source ./ports.sh
 
 PROJECT_ID=$(head -n 1 ../project_id.txt)
 
-export PORT=8085
+PORT=8085
 kill -9 $(lsof -t -i tcp:$PORT) 2>/dev/null
 gcloud beta emulators pubsub start --project=$PROJECT_ID --host-port=0.0.0.0:$PORT &
 

@@ -111,7 +111,7 @@ def message_actions(request):
             game_ref.set(game)
 
             topic_path = publisher.topic_path(
-                project_id, 'pre_guess_stage_topic')
+                project_id, 'topic_pre_guess_stage')
 
             data = game_id.encode("utf-8")
 
@@ -187,7 +187,7 @@ def pre_guess_stage(event, context):
         ts=lower_ts,
         blocks=[guess_timer_block, guessers_block])
 
-    topic_path = publisher.topic_path(project_id, 'guess_stage_topic')
+    topic_path = publisher.topic_path(project_id, 'topic_guess_stage')
 
     data = game_id.encode("utf-8")
 
@@ -243,7 +243,7 @@ def guess_stage(event, context):
 
             topic_path = publisher.topic_path(
                 project_id,
-                'pre_vote_stage_topic')
+                'topic_pre_vote_stage')
 
             data = game_id.encode("utf-8")
 
@@ -252,7 +252,7 @@ def guess_stage(event, context):
 
         if int((datetime.now() - start_call_datetime).total_seconds()) > 60:
 
-            topic_path = publisher.topic_path(project_id, 'guess_stage_topic')
+            topic_path = publisher.topic_path(project_id, 'topic_guess_stage')
 
             data = game_id.encode("utf-8")
 

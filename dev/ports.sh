@@ -12,3 +12,16 @@ in
     5006) echo result_stage ;;
 esac
 }
+
+function port_to_signature_type(){
+case $1
+in
+    5000) echo http ;;
+    5001) echo http ;;
+    5002) echo event ;;
+    5003) echo event ;;
+    5004) echo event ;;
+    5005) echo event ;;
+    5006) echo event ;;
+esac
+}

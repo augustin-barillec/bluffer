@@ -5,7 +5,7 @@ function clean_ngroks(){
 
 function clean_functions(){
     rm -rf function_*.log
-    for port in 5000 5001 5002 5003 5004 5005
+    for port in {5000..5006}
     do
         kill -9 $(lsof -t -i tcp:$port)
     done
