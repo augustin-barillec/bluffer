@@ -1,8 +1,6 @@
 #!/bin/bash
 
-source clean_utils.sh
-
-clean_ngroks
+./clean_ngroks.sh
 
 for port in 5000 5001
 do

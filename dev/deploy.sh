@@ -1,9 +1,8 @@
 #!/bin/bash
 
 source ports.sh
-source clean_utils.sh
 
-clean_functions
+./clean_functions.sh
 
 $(gcloud beta emulators pubsub env-init)
 
