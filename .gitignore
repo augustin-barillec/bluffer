@@ -1,13 +1,5 @@
 .idea
 
-conf
-
-bluffer/fonts/*.pkl
-
-*.egg-info
-build
-dist
-
 venv
 
 dev/credentials.json

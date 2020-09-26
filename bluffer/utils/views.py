@@ -1,7 +1,5 @@
 from copy import deepcopy
-from bluffer.utils import jsons
-from bluffer.utils import ids
-from bluffer.utils import blocks
+from bluffer.utils import jsons, ids, blocks
 
 
 def get_view(basename):
@@ -20,16 +18,14 @@ def build_exception_view(msg):
     return res
 
 
-def build_game_setup_view(secret_prefix, game_id):
+def build_game_setup_view(id_):
     res = deepcopy(game_setup_view_template)
-    id_ = ids.build_slack_object_id(secret_prefix, 'game_setup_view', game_id)
     res['callback_id'] = id_
     return res
 
 
-def build_guess_view(secret_prefix, game_id, question):
+def build_guess_view(id_, question):
     res = deepcopy(guess_view_template)
-    id_ = ids.build_slack_object_id(secret_prefix, 'guess_view', game_id)
     res['callback_id'] = id_
     input_block = deepcopy(res['blocks'][0])
     question_block = blocks.build_text_block(question)
@@ -37,27 +33,40 @@ def build_guess_view(secret_prefix, game_id, question):
     return res
 
 
-def build_vote_view(secret_prefix, game_id, guessers, truth):
+def build_vote_view(secret_prefix, game_id, voter, guessers, truth):
+    res = deepcopy(vote_view_template)
+    id_ = ids.build_slack_object_id(secret_prefix, 'vote_view', game_id)
+    res['callback_id'] = id_
+    input_block_template = res['blocks'][0]
+    votable_proposals_msg = ['Voting options:']
+    option_template = input_block_template['element']['options'][0]
+    vote_options = []
 
-    def build_signed_proposals(guessers_, truth_):
-        import random
-        res = list(guessers_.items()) + [('Truth', truth)]
-        random.shuffle(res)
-        res = [(index, author, proposal)
-               for index, (author, proposal) in enumerate(res, 1)]
+    def build_votable_proposals(voter):
+        res = []
+        for index, author, proposal in signed_proposals:
+            if author != voter:
+                res.append((index, proposal))
         return res
 
-    def build_anonymous_proposals_block(signed_proposals_):
-        msg = ['Proposals:']
-        for index, author, proposal in signed_proposals_:
-            msg.append('{}) {}'.format(index, proposal))
-        msg = '\n'.join(msg)
-        return blocks.build_text_block(msg)
+    for index, proposal in build_votable_proposals(voter):
+        votable_proposals_msg.append('{}) {}'.format(index, proposal))
+        vote_option = deepcopy(option_template)
+        vote_option['text']['text'] = '{}'.format(index)
+        vote_option['value'] = '{}'.format(index)
+        vote_options.append(vote_option)
+    votable_proposals_msg = '\n'.join(votable_proposals_msg)
+    input_block = input_block_template
+    input_block['element']['options'] = vote_options
+    res['blocks'] = [self.build_own_guess_block(voter),
+                     blocks.build_text_block(votable_proposals_msg),
+                     input_block]
+    return res
+
 
     id_ = ids.build_slack_object_id(secret_prefix, 'vote_view', game_id)
     signed_proposals = build_signed_proposals(guessers, truth)
     anonymous_proposals_block = build_anonymous_proposals_block(signed_proposals)
-
 
 
 def build_exception_view_response(msg):
@@ -86,6 +95,12 @@ def open_guess_view(slack_client, trigger_id,
                     secret_prefix, game_id, question):
     guess_view = build_guess_view(secret_prefix, game_id, question)
     open_view(slack_client, trigger_id, guess_view)
+
+
+def open_vote_view(slack_client, trigger_id, secret_prefix, game_id, question,
+                   voter):
+    vote_view = build_vote_view(secret_prefix, game_id, voter)
+    open_view(slack_client, trigger_id, vote_view)
 
 
 def collect_game_setup(game_setup_view):
