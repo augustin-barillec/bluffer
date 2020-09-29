@@ -4,6 +4,8 @@ venv
 
 dev/credentials.json
 dev/ngrok
+dev/*.log
+dev/*.out
 
 project_id.txt
 

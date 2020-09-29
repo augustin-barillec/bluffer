@@ -1,5 +1,7 @@
 from copy import deepcopy
 from bluffer.utils.jsons import get_json
+from bluffer.utils.ids import user_display
+from bluffer.utils.timer import build_time_display
 
 
 def get_block(basename):
@@ -33,7 +35,7 @@ def build_image_block(url, alt_text):
 
 
 def build_title_block(organizer_id):
-    msg = 'Game set up by <@{}>!'.format(organizer_id)
+    msg = 'Game set up by {}!'.format(user_display(organizer_id))
     return build_text_block(msg)
 
 
@@ -47,3 +49,26 @@ def build_pre_vote_stage_block():
 
 def build_pre_results_stage_block():
     return build_text_block('Computing results :drum_with_drumsticks:')
+
+
+def build_guess_button_block(id_):
+    return build_button_block('Your guess', id_)
+
+
+def build_vote_button_block(id_):
+    return build_button_block('Your vote', id_)
+
+
+def build_timer_block(time_left, kind):
+    assert kind in ('guess', 'vote')
+    time_display = build_time_display(time_left)
+    msg = 'Time left to {}: {}'.format(kind, time_display)
+    return build_text_block(msg)
+
+
+def build_guess_timer_block(time_left):
+    return build_timer_block(time_left, 'guess')
+
+
+def build_vote_timer_block(time_left):
+    return build_timer_block(time_left, 'vote')

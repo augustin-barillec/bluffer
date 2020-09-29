@@ -62,9 +62,9 @@ game = {
     'start_guess_datetime': '2020-03-05 19:50:01',
     'start_vote_datetime': '2020-03-05 19:57:01',
     'potential_guessers': {'u1': 'n1', 'u2': 'n2', 'u3': 'n3'},
-    'guessers': {'u1': 'guess1', 'u2': 'guess2'},
-    'order': ['u2', 'Truth', 'u1'],
-    'voters': {'u2': 1}
+    'guessers': {'u1': ('t1', 'guess1'), 'u2': ('t2', 'guess2')},
+    'proposals_order': ['u2', 'Truth', 'u1'],
+    'voters': {'u2': ('t2', 1)}
 }
 
 # results stage

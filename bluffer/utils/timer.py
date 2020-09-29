@@ -5,8 +5,13 @@ def compute_deadline(start_datetime, time_left):
     return start_datetime + timedelta(seconds=time_left)
 
 
-def compute_time_left(deadline):
-    return int((deadline - datetime.now()).total_seconds())
+def d1_minus_d2(d1, d2):
+    return int((d1 - d2).total_seconds())
+
+
+def compute_time_left(deadline_str):
+    deadline = datetime.fromisoformat(deadline_str)
+    return d1_minus_d2(deadline, datetime.now())
 
 
 def convert_to_min_sec(time):
