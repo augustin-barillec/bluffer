@@ -1,6 +1,5 @@
 from copy import deepcopy
 from bluffer.utils.jsons import get_json
-from bluffer.utils.ids import user_display
 from bluffer.utils.timer import build_time_display
 
 
@@ -12,6 +11,14 @@ divider_block = get_block('divider.json')
 text_block_template = get_block('text.json')
 button_block_template = get_block('button.json')
 image_block_template = get_block('image.json')
+
+
+def u(blocks):
+    return [divider_block] + blocks
+
+
+def d(blocks):
+    return blocks + [divider_block]
 
 
 def build_text_block(msg):
@@ -32,23 +39,6 @@ def build_image_block(url, alt_text):
     res['image_url'] = url
     res['alt_text'] = alt_text
     return res
-
-
-def build_title_block(organizer_id):
-    msg = 'Game set up by {}!'.format(user_display(organizer_id))
-    return build_text_block(msg)
-
-
-def build_pre_guess_stage_block():
-    return build_text_block('Preparing guess stage...')
-
-
-def build_pre_vote_stage_block():
-    return build_text_block('Preparing vote stage...')
-
-
-def build_pre_results_stage_block():
-    return build_text_block('Computing results :drum_with_drumsticks:')
 
 
 def build_guess_button_block(id_):

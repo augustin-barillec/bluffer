@@ -1,3 +1,4 @@
+import random
 from slackclient import SlackClient
 from bluffer.utils import *
 
@@ -107,6 +108,13 @@ class Game:
             channel=self.channel_id,
             blocks=blocks_)['ts']
 
+    def post_ephemeral(self, user_id, msg):
+        self.slack_client.api_call(
+            'chat.postEphemeral',
+            channel=self.channel_id,
+            user=user_id,
+            text=msg)
+
     def update_message(self, blocks_, ts):
         self.slack_client.api_call(
             'chat.update',
@@ -125,30 +133,32 @@ class Game:
         self.update_lower(guess_stage_lower_blocks)
 
     def build_title_block(self):
-        return blocks.build_title_block(self.organizer_id)
+        msg = 'Game set up by {}!'.format(ids.user_display(self.organizer_id))
+        return blocks.build_text_block(msg)
 
     def build_question_block(self):
         return blocks.build_text_block(self.game_dict['question'])
 
     def build_guess_button_block(self):
         id_ = self.build_guess_button_block_id()
-        return blocks.build_guess_button_block(id_)
+        return blocks.build_button_block('Your guess', id_)
 
     def build_vote_button_block(self):
-        id_ = self.build_vote_button_block()
-        return blocks.build_vote_button_block(id_)
+        id_ = self.build_vote_button_block_id()
+        return blocks.build_button_block('Your vote', id_)
 
     @staticmethod
     def build_pre_guess_stage_block():
-        return blocks.build_pre_guess_stage_block()
+        return blocks.build_text_block('Preparing guess stage...')
 
     @staticmethod
     def build_pre_vote_stage_block():
-        return blocks.build_pre_vote_stage_block()
+        return blocks.build_text_block('Preparing vote stage...')
 
     @staticmethod
     def build_pre_results_stage_block():
-        return blocks.build_pre_results_stage_block()
+        return blocks.build_text_block(
+            'Computing results :drum_with_drumsticks:')
 
     def build_guess_timer_block(self):
         time_left = self.compute_time_left_to_guess()
@@ -158,18 +168,35 @@ class Game:
         time_left = self.compute_time_left_to_vote()
         return blocks.build_vote_timer_block(time_left)
 
-    def build_guessers_block(self):
-        guessers = self.game_dict['guessers']
-        if not guessers:
-            return blocks.build_text_block('No one has guessed yet.')
-        guessers_for_display = ids.user_displays(guessers)
-        msg = 'Guessers: {}'.format(guessers_for_display)
+    def build_users_blocks(self, kind):
+        assert kind in ('guessers', 'voters')
+        past_participle = 'guessed' if kind == 'guessers' else 'voted'
+        users = self.game_dict[kind]
+        users = sorted(users, key=lambda k: users[k][0])
+        if not users:
+            msg = 'No one has {} yet.'.format(past_participle)
+            return blocks.build_text_block(msg)
+        user_displays = ids.user_displays(users)
+        msg = '{}: {}'.format(kind.title(), user_displays)
         return blocks.build_text_block(msg)
+
+    def build_guessers_block(self):
+        return self.build_users_blocks('guessers')
+
+    def build_voters_block(self):
+        return self.build_users_blocks('voters')
 
     def build_guess_stage_lower_blocks(self):
         guess_timer_block = self.build_guess_timer_block()
         guessers_block = self.build_guessers_block()
         return [guess_timer_block, guessers_block]
+
+    def build_anonymous_proposals_block(self):
+        msg = ['Proposals:']
+        for index, author, proposal in self.game_dict['signed_proposals']:
+            msg.append('{}) {}'.format(index, proposal))
+        msg = '\n'.join(msg)
+        return blocks.build_text_block(msg)
 
     def get_potential_guessers(self):
         return members.get_potential_guessers(
@@ -185,6 +212,36 @@ class Game:
 
     def compute_time_left_to_vote(self):
         return timer.compute_time_left(self.game_dict['vote_deadline'])
+
+    def send_vote_reminders(self):
+        time_left_to_vote = self.compute_time_left_to_guess()
+        for u in self.game_dict['guessers']:
+            msg_template = ('Hey {}, you can now vote in the bluffer game ' 
+                            'organized by {}!')
+            msg = msg_template.format(
+                ids.user_display(u),
+                ids.user_display(self.organizer_id),
+                time_left_to_vote)
+            self.post_ephemeral(u, msg)
+
+    def build_signed_proposals(self):
+        guessers = self.game_dict['frozen_guessers']
+        truth = self.game_dict['truth']
+        res = [(k, guessers[k][1]) for k in guessers] + [('Truth', truth)]
+        random.shuffle(res)
+        res = [(index, author, proposal)
+               for index, (author, proposal) in enumerate(res, 1)]
+        return res
+
+
+
+
+
+
+
+
+
+
 
 
 

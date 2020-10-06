@@ -1,5 +1,6 @@
 import os
 import time
+import pytz
 import json
 from bluffer.game import Game
 
@@ -85,8 +86,8 @@ def message_actions(request):
         game_dict = game.get_game_dict()
         if view_callback_id.startswith(SECRET_PREFIX + '#guess_view'):
             guess = views.collect_guess(view)
-            timed_guess = (str(datetime.now()))
-            game_dict['guessers'][user_id] = guess
+            guess_ts = datetime.now(pytz.UTC)
+            game_dict['guessers'][user_id] = (guess_ts, guess)
             game_ref.set(game_dict, merge=True)
             game.update_guess_stage_lower()
             return make_response('', 200)
@@ -120,15 +121,15 @@ def pre_guess_stage(event, context):
     title_block = game.build_title_block()
     pre_guess_stage_block = game.build_pre_guess_stage_block()
 
-    upper_blocks = [title_block, pre_guess_stage_block]
-    lower_blocks = [blocks.divider_block]
+    upper_blocks = blocks.u([title_block, pre_guess_stage_block])
+    lower_blocks = blocks.d([])
 
     upper_ts = game.post_message(upper_blocks)
     lower_ts = game.post_message(lower_blocks)
 
     potential_guessers = game.get_potential_guessers()
 
-    guess_start_datetime = datetime.now()
+    guess_start_datetime = datetime.now(pytz.UTC)
     guess_deadline = timer.compute_deadline(
         guess_start_datetime, game_dict['time_to_guess'])
 
@@ -136,8 +137,8 @@ def pre_guess_stage(event, context):
     game_dict['lower_ts'] = lower_ts
     game_dict['potential_guessers'] = potential_guessers
     game_dict['guessers'] = dict()
-    game_dict['guess_start_datetime'] = str(guess_start_datetime)
-    game_dict['guess_deadline'] = str(guess_deadline)
+    game_dict['guess_start_datetime'] = guess_start_datetime
+    game_dict['guess_deadline'] = guess_deadline
     game_ref.set(game_dict, merge=True)
 
     question_block = game.build_question_block()
@@ -146,8 +147,8 @@ def pre_guess_stage(event, context):
     guess_timer_block = game.build_guess_timer_block()
     guessers_block = game.build_guessers_block()
 
-    upper_blocks = [title_block, question_block, guess_button_block]
-    lower_blocks = [guess_timer_block, guessers_block]
+    upper_blocks = blocks.u([title_block, question_block, guess_button_block])
+    lower_blocks = blocks.d([guess_timer_block, guessers_block])
 
     game.update_upper(upper_blocks)
     game.update_lower(lower_blocks)
@@ -158,7 +159,7 @@ def pre_guess_stage(event, context):
 
 def guess_stage(event, context):
 
-    call_datetime = datetime.now()
+    call_datetime = datetime.now(pytz.UTC)
 
     game_id = pubsub.event_data_to_game_id(event['data'])
 
@@ -179,8 +180,9 @@ def guess_stage(event, context):
             question_block = game.build_question_block()
             pre_vote_stage_block = game.build_pre_vote_stage_block()
 
-            upper_blocks = [title_block, question_block, pre_vote_stage_block]
-            lower_blocks = [blocks.divider_block]
+            upper_blocks = blocks.u([title_block, question_block,
+                                     pre_vote_stage_block])
+            lower_blocks = blocks.d([])
 
             game.update_upper(upper_blocks)
             game.update_lower(lower_blocks)
@@ -188,7 +190,7 @@ def guess_stage(event, context):
             game.trigger_pre_vote_stage()
             return make_response('', 200)
 
-        if timer.d1_minus_d2(datetime.now(), call_datetime) > 60:
+        if timer.d1_minus_d2(datetime.now(pytz.UTC), call_datetime) > 60:
             game.trigger_guess_stage()
             return make_response('', 200)
 
@@ -197,69 +199,41 @@ def guess_stage(event, context):
 
 def pre_vote_stage(event, context):
 
-    game_id = base64.b64decode(event['data']).decode('utf-8')
-    team_id = ids.game_id_to_team_id(game_id)
-    organizer_id = ids.game_id_to_organizer_id(game_id)
-    channel_id = ids.game_id_to_channel_id(game_id)
+    game_id = pubsub.event_data_to_game_id(event['data'])
 
-    slack_client = team_id_to_slack_client(db, team_id)
+    game = build_game(game_id)
+    game.get_team_dict()
+    game.get_game_dict()
+    game_dict = game.game_dict
+    game_ref = game.get_game_ref()
 
-    game_dict = get_game(db, team_id, game_id)
-    truth = game_dict['truth']
-    guessers = game_dict['guessers']
+    vote_start_datetime = datetime.now(pytz.UTC)
+    vote_deadline = timer.compute_deadline(
+        vote_start_datetime, game_dict['time_to_vote'])
 
-    def build_signed_proposals(guessers_, truth_):
-        import random
-        res = list(guessers_.items()) + [('Truth', truth_)]
-        random.shuffle(res)
-        res = [(index, author, proposal) for index, (author, proposal) in
-               enumerate(res, 1)]
-        return res
-
-    def build_anonymous_proposals_block(signed_proposals_):
-        msg = ['Proposals:']
-        for index, author, proposal in signed_proposals_:
-            msg.append('{}) {}'.format(index, proposal))
-        msg = '\n'.join(msg)
-        return blocks.build_text_block(msg)
-
-    start_vote_datetime = datetime.now()
-    game_dict['start_vote_datetime'] = str(start_vote_datetime)
-    game_ref = build_game_ref(db, team_id, game_id)
+    game_dict['frozen_guessers'] = deepcopy(game_dict['guessers'])
+    game_dict['signed_proposals'] = game.build_signed_proposals()
+    game_dict['voters'] = dict()
+    game_dict['vote_start_datetime'] = vote_start_datetime
+    game_dict['vote_deadline'] = vote_deadline
     game_ref.set(game_dict, merge=True)
 
-    signed_proposals = build_signed_proposals(guessers, truth)
-    anonymous_proposals_block = build_anonymous_proposals_block(
-        signed_proposals)
+    title_block = game.build_title_block()
+    question_block = game.build_question_block()
+    anonymous_proposals_block = game.build_anonymous_proposals_block()
+    vote_button_block = game.build_vote_button_block()
+    vote_timer_block = game.build_vote_timer_block()
+    voters_block = game.build_voters_block()
 
-    title_block = blocks.build_title_block(organizer_id)
-    question_block = blocks.build_text_block(game_dict['question'])
+    upper_blocks = blocks.u([title_block, question_block,
+                             anonymous_proposals_block, vote_button_block])
+    lower_blocks = blocks.d([vote_timer_block, voters_block])
 
-    msg = 'Your vote'
-    id_ = ids.build_slack_object_id(
-        SECRET_PREFIX, 'vote_button_block', game_id)
-    vote_button_block = blocks.build_button_block(msg, id_)
+    game.update_upper(upper_blocks)
+    game.update_lower(lower_blocks)
 
-    slack_client.api_call(
-        'chat.update',
-        channel=channel_id,
-        ts=game_dict['upper_ts'],
-        blocks=[
-            title_block,
-            question_block,
-            blocks.build_text_block('Preparing vote stage...'),
-            anonymous_proposals_block,
-            vote_button_block
-        ])
-    slack_client.api_call(
-        'chat.update',
-        channel=channel_id,
-        ts=game_dict['lower_ts'],
-        blocks=[blocks.divider_block])
+    game.trigger_vote_stage()
 
-    topic_path = publisher.topic_path(project_id, 'vote_stage')
-    data = game_id.encode("utf-8")
-    publisher.publish(topic_path, data=data)
     return make_response('', 200)
 
 
