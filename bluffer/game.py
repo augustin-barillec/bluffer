@@ -11,6 +11,7 @@ class Game:
             project_id,
             publisher,
             db,
+            logger
     ):
         self.game_id = game_id
         self.code = self.game_id.encode("utf-8")
@@ -18,6 +19,7 @@ class Game:
         self.project_id = project_id
         self.publisher = publisher
         self.db = db
+        self.logger = logger
 
         self.team_id = ids.game_id_to_team_id(self.game_id)
         self.organizer_id = ids.game_id_to_organizer_id(self.game_id)
@@ -132,6 +134,10 @@ class Game:
         guess_stage_lower_blocks = self.build_guess_stage_lower_blocks()
         self.update_lower(guess_stage_lower_blocks)
 
+    def update_vote_stage_lower(self):
+        vote_stage_lower_blocks = self.build_vote_stage_lower_blocks()
+        self.update_lower(vote_stage_lower_blocks)
+
     def build_title_block(self):
         msg = 'Game set up by {}!'.format(ids.user_display(self.organizer_id))
         return blocks.build_text_block(msg)
@@ -189,11 +195,17 @@ class Game:
     def build_guess_stage_lower_blocks(self):
         guess_timer_block = self.build_guess_timer_block()
         guessers_block = self.build_guessers_block()
-        return [guess_timer_block, guessers_block]
+        return blocks.d([guess_timer_block, guessers_block])
+
+    def build_vote_stage_lower_blocks(self):
+        vote_timer_block = self.build_vote_timer_block()
+        voters_block = self.build_voters_block()
+        return blocks.d([vote_timer_block, voters_block])
 
     def build_anonymous_proposals_block(self):
         msg = ['Proposals:']
-        for index, author, proposal in self.game_dict['signed_proposals']:
+        proposals = self.to_python_proposals(self.game_dict['proposals'])
+        for index, author, proposal in proposals:
             msg.append('{}) {}'.format(index, proposal))
         msg = '\n'.join(msg)
         return blocks.build_text_block(msg)
@@ -206,6 +218,11 @@ class Game:
         potential_guessers = self.game_dict['potential_guessers']
         guessers = self.game_dict['guessers']
         return set(potential_guessers) - set(guessers)
+
+    def compute_remaining_potential_voters(self):
+        potential_voters = self.game_dict['potential_voters']
+        voters = self.game_dict['voters']
+        return set(potential_voters) - set(voters)
 
     def compute_time_left_to_guess(self):
         return timer.compute_time_left(self.game_dict['guess_deadline'])
@@ -224,7 +241,7 @@ class Game:
                 time_left_to_vote)
             self.post_ephemeral(u, msg)
 
-    def build_signed_proposals(self):
+    def build_proposals_for_python(self):
         guessers = self.game_dict['frozen_guessers']
         truth = self.game_dict['truth']
         res = [(k, guessers[k][1]) for k in guessers] + [('Truth', truth)]
@@ -232,6 +249,20 @@ class Game:
         res = [(index, author, proposal)
                for index, (author, proposal) in enumerate(res, 1)]
         return res
+
+    @staticmethod
+    def to_firestore_proposals(python_proposals):
+        return {str(index): [author, proposal]
+                for index, author, proposal in python_proposals}
+
+    @staticmethod
+    def to_python_proposals(firestore_proposals):
+        return [
+            (int(index), firestore_proposals[0], firestore_proposals[1])
+            for index in firestore_proposals]
+
+    def build_proposals_for_firestore(self):
+        return self.to_firestore_proposals(self.build_proposals_for_python())
 
 
 

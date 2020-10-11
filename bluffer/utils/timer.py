@@ -1,3 +1,4 @@
+import pytz
 from datetime import datetime, timedelta
 
 
@@ -9,9 +10,8 @@ def d1_minus_d2(d1, d2):
     return int((d1 - d2).total_seconds())
 
 
-def compute_time_left(deadline_str):
-    deadline = datetime.fromisoformat(deadline_str)
-    return d1_minus_d2(deadline, datetime.now())
+def compute_time_left(deadline):
+    return d1_minus_d2(deadline, datetime.now(pytz.UTC))
 
 
 def convert_to_min_sec(time):

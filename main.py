@@ -2,8 +2,8 @@ import os
 import time
 import pytz
 import json
+import logging
 from bluffer.game import Game
-
 
 from copy import deepcopy
 from flask import Flask, Response, make_response
@@ -11,6 +11,10 @@ from google.cloud import pubsub_v1
 from datetime import datetime
 from bluffer.utils import *
 from google.cloud import firestore
+
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
+                    level='INFO')
+logger = logging.getLogger()
 
 db = firestore.Client()
 publisher = pubsub_v1.PublisherClient()
@@ -28,7 +32,8 @@ def build_game(game_id):
         secret_prefix=SECRET_PREFIX,
         project_id=project_id,
         publisher=publisher,
-        db=db)
+        db=db,
+        logger=logger)
 
 
 def slack_command(request):
@@ -87,7 +92,7 @@ def message_actions(request):
         if view_callback_id.startswith(SECRET_PREFIX + '#guess_view'):
             guess = views.collect_guess(view)
             guess_ts = datetime.now(pytz.UTC)
-            game_dict['guessers'][user_id] = (guess_ts, guess)
+            game_dict['guessers'][user_id] = [guess_ts, guess]
             game_ref.set(game_dict, merge=True)
             game.update_guess_stage_lower()
             return make_response('', 200)
@@ -212,7 +217,7 @@ def pre_vote_stage(event, context):
         vote_start_datetime, game_dict['time_to_vote'])
 
     game_dict['frozen_guessers'] = deepcopy(game_dict['guessers'])
-    game_dict['signed_proposals'] = game.build_signed_proposals()
+    game_dict['proposals'] = game.build_proposals_for_firestore()
     game_dict['voters'] = dict()
     game_dict['vote_start_datetime'] = vote_start_datetime
     game_dict['vote_deadline'] = vote_deadline
@@ -238,18 +243,41 @@ def pre_vote_stage(event, context):
 
 
 def vote_stage(event, context):
+    call_datetime = datetime.now(pytz.UTC)
 
-    game_id = base64.b64decode(event['data']).decode('utf-8')
-    team_id = ids.game_id_to_team_id(game_id)
-    organizer_id = ids.game_id_to_organizer_id(game_id)
-    channel_id = ids.game_id_to_channel_id(game_id)
+    game_id = pubsub.event_data_to_game_id(event['data'])
 
-    slack_client = team_id_to_slack_client(db, team_id)
+    game = build_game(game_id)
+    game.get_team_dict()
 
-    game_dict = get_game(db, team_id, game_id)
+    while True:
+        game.get_game_dict()
 
+        time_left_to_vote = game.compute_time_left_to_vote()
+        rpg = game.compute_remaining_potential_voters()
 
-    return make_response('', 200)
+        game.update_guess_stage_lower()
+
+        if time_left_to_vote <= 0 or not rpg:
+            title_block = game.build_title_block()
+            question_block = game.build_question_block()
+            pre_vote_stage_block = game.build_pre_vote_stage_block()
+
+            upper_blocks = blocks.u([title_block, question_block,
+                                     pre_vote_stage_block])
+            lower_blocks = blocks.d([])
+
+            game.update_upper(upper_blocks)
+            game.update_lower(lower_blocks)
+
+            game.trigger_pre_vote_stage()
+            return make_response('', 200)
+
+        if timer.d1_minus_d2(datetime.now(pytz.UTC), call_datetime) > 60:
+            game.trigger_guess_stage()
+            return make_response('', 200)
+
+        time.sleep(5)
 
 
 def result_stage(event, context):
