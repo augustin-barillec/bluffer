@@ -1,4 +1,5 @@
 import random
+from copy import deepcopy
 from slackclient import SlackClient
 from bluffer.utils import *
 
@@ -29,6 +30,15 @@ class Game:
         self.game_dict = None
 
         self.slack_client = None
+
+        self.guesses = None
+        self.guessers = None
+
+        self.votes = None
+        self.voters = None
+        self.results = None
+        self.winners = None
+        self.max_score = None
 
     def get_team_dict(self):
         self.team_dict = firestore.team_id_to_team_dict(
@@ -71,6 +81,27 @@ class Game:
     def build_guess_view(self):
         id_ = self.build_guess_view_id()
         return views.build_guess_view(id_, self.game_dict['question'])
+
+    def build_vote_view(self, voter):
+        res = deepcopy(views.vote_view_template)
+        res['callback_id'] = self.build_vote_view_id()
+        input_block_template = res['blocks'][0]
+        votable_proposals_msg = ['Voting options:']
+        option_template = input_block_template['element']['options'][0]
+        vote_options = []
+        for index, proposal in self.build_votable_proposals(voter):
+            votable_proposals_msg.append('{}) {}'.format(index, proposal))
+            vote_option = deepcopy(option_template)
+            vote_option['text']['text'] = '{}'.format(index)
+            vote_option['value'] = '{}'.format(index)
+            vote_options.append(vote_option)
+        votable_proposals_msg = '\n'.join(votable_proposals_msg)
+        input_block = input_block_template
+        input_block['element']['options'] = vote_options
+        res['blocks'] = [self.build_own_guess_block(voter),
+                         blocks.build_text_block(votable_proposals_msg),
+                         input_block]
+        return res
 
     def open_view(self, trigger_id, view):
         views.open_view(self.slack_client, trigger_id, view)
@@ -154,12 +185,16 @@ class Game:
         return blocks.build_button_block('Your vote', id_)
 
     @staticmethod
-    def build_pre_guess_stage_block():
+    def build_preparing_guess_stage_block():
         return blocks.build_text_block('Preparing guess stage...')
 
     @staticmethod
-    def build_pre_vote_stage_block():
+    def build_preparing_vote_stage_block():
         return blocks.build_text_block('Preparing vote stage...')
+
+    @staticmethod
+    def build_computing_results_stage_block():
+        return blocks.build_text_block('Computing results...')
 
     @staticmethod
     def build_pre_results_stage_block():
@@ -241,15 +276,6 @@ class Game:
                 time_left_to_vote)
             self.post_ephemeral(u, msg)
 
-    def build_proposals_for_python(self):
-        guessers = self.game_dict['frozen_guessers']
-        truth = self.game_dict['truth']
-        res = [(k, guessers[k][1]) for k in guessers] + [('Truth', truth)]
-        random.shuffle(res)
-        res = [(index, author, proposal)
-               for index, (author, proposal) in enumerate(res, 1)]
-        return res
-
     @staticmethod
     def to_firestore_proposals(python_proposals):
         return {str(index): [author, proposal]
@@ -258,20 +284,218 @@ class Game:
     @staticmethod
     def to_python_proposals(firestore_proposals):
         return [
-            (int(index), firestore_proposals[0], firestore_proposals[1])
+            (int(index),
+             firestore_proposals[index][0],
+             firestore_proposals[index][1])
             for index in firestore_proposals]
 
-    def build_proposals_for_firestore(self):
-        return self.to_firestore_proposals(self.build_proposals_for_python())
+    def build_python_proposals(self):
+        guessers = self.game_dict['frozen_guessers']
+        truth = self.game_dict['truth']
+        res = [(k, guessers[k][1]) for k in guessers] + [('Truth', truth)]
+        random.shuffle(res)
+        res = [(index, author, proposal)
+               for index, (author, proposal) in enumerate(res, 1)]
+        return res
 
+    def build_firestore_proposals(self):
+        return self.to_firestore_proposals(self.build_python_proposals())
 
+    def get_python_proposals(self):
+        return self.to_python_proposals(self.game_dict['proposals'])
 
+    def build_votable_proposals(self, voter):
+        proposals = self.get_python_proposals()
+        res = []
+        for index, author, proposal in proposals:
+            if author != voter:
+                res.append((index, proposal))
+        return res
 
+    def build_own_guess_block(self, voter):
+        index = self.author_to_index(voter)
+        guess = self.author_to_proposal(voter)
+        msg = 'Your guess: {}) {}'.format(index, guess)
+        return blocks.build_text_block(msg)
 
+    def index_to_author(self, index):
+        for index_, author, proposal in self.get_python_proposals():
+            if index_ == index:
+                return author
 
+    def author_to_index(self, author):
+        for index, author_, proposal in self.get_python_proposals():
+            if author == author_:
+                return index
 
+    def author_to_proposal(self, author):
+        for index_, author_, proposal in self.get_python_proposals():
+            if author_ == author:
+                return proposal
 
+    def open_vote_view(self, trigger_id, voter):
+        view = self.build_vote_view(voter)
+        self.open_view(trigger_id, view)
 
+    def build_results(self):
+        results = []
+        for index, author, proposal in self.get_python_proposals():
+            r = dict()
+            if author == 'Truth':
+                continue
+            r['index'] = index
+            r['guesser'] = author
+            r['guesser_name'] = self.get_guesser_name(author)
+            r['guess'] = proposal
+            if author not in self.voters:
+                r['score'] = 0
+                results.append(r)
+                continue
+            vote_index = self.votes[author]
+            r['vote_index'] = vote_index
+            r['chosen_author'] = self.index_to_author(vote_index)
+            r['truth_score'] = self.compute_truth_score(author)
+            r['bluff_score'] = self.compute_bluff_score(author)
+            r['score'] = r['truth_score'] + r['bluff_score']
+            results.append(r)
+
+        def sort_key(r_):
+            return 'vote_index' not in r_, -r_['score'], r_['guesser']
+
+        results.sort(key=lambda r_: sort_key(r_))
+
+        self.results = results
+
+    def compute_truth_score(self, voter):
+        return int(self.votes[voter] == self.author_to_index('Truth'))
+
+    def compute_bluff_score(self, voter):
+        res = 0
+        for voter_ in self.votes.keys():
+            voter_index = self.author_to_index(voter)
+            if self.votes[voter_] == voter_index:
+                res += 2
+        return res
+
+    def get_guesser_name(self, guesser):
+        return self.game_dict['potential_guessers'][guesser]
+
+    def build_guesses(self):
+        self.guesses = {
+            guesser: self.game_dict['frozen_guessers'][guesser][1]
+            for guesser in self.game_dict['frozen_guessers']
+        }
+
+    def build_votes(self):
+        self.votes = {
+            voter: self.game_dict['frozen_voters'][voter][1]
+            for voter in self.game_dict['frozen_voters']
+        }
+
+    def build_guessers(self):
+        self.guessers = list(self.guesses.keys())
+
+    def build_voters(self):
+        self.voters = list(self.votes.keys())
+
+    def compute_winners(self):
+        res = []
+        for r in self.results:
+            if r['score'] == self.max_score:
+                res.append(r['guesser'])
+        self.winners = res
+
+    def compute_max_score(self):
+        scores = [r['score'] for r in self.results if 'score' in r]
+        self.max_score = scores[0]
+
+    def build_conclusion_msg(self, fmt):
+        assert fmt in ('slack', 'pdf')
+        lg = len(self.guessers)
+        lv = len(self.voters)
+        if lg == 0:
+            return 'No one played this game :sob:.'
+        if lg == 1:
+            g = ids.user_display(self.guessers[0])
+            return 'Thanks for your guess, {}!'.format(g)
+        if lv == 0:
+            res = 'No one voted'
+            if fmt == 'slack':
+                res += ' :sob:.'
+                return res
+            else:
+                res += ' :/.'
+                return res
+        if lv == 1:
+            r = self.results[0]
+            if fmt == 'slack':
+                g = ids.user_display(r['guesser'])
+            else:
+                g = r['guesser_name']
+            ca = r['chosen_author']
+            if ca == 'Truth':
+                msg = 'Bravo {}! You found the truth!'.format(g)
+                if fmt == 'slack':
+                    msg += ' :v:'
+                else:
+                    msg += ' :)'
+                return msg
+            else:
+                msg = 'Hey {}, at least you voted!'.format(g)
+                if fmt == 'slack':
+                    msg += ' :grimacing:'
+                else:
+                    msg += ' :|'
+                return msg
+        if self.max_score == 0:
+            return 'Zero points scored!'
+        lw = len(self.winners)
+        if lw == lv:
+            msg = "Well, it's a draw!"
+            if fmt == 'slack':
+                msg += ' :scales:'
+            return msg
+        if lw == 1:
+            if fmt == 'slack':
+                w = ids.user_display(self.winners[0])
+                emoji = ' :first_place_medal:'
+            else:
+                w = self.get_guesser_name(self.winners[0])
+                emoji = ''
+            return 'And the winner is {}!{}'.format(w, emoji)
+        if lw > 1:
+            if fmt == 'slack':
+                ws = [ids.user_display(w) for w in self.winners]
+                emoji = ' :clap:'
+            else:
+                ws = [self.get_guesser_name(w) for w in self.winners]
+                emoji = ''
+            msg_aux = ','.join(ws[:-1])
+            msg_aux += ' and {}'.format(ws[-1])
+            return 'And the winners are {}!{}'.format(msg_aux, emoji)
+
+    def build_signed_guesses_msg(self, fmt):
+        assert fmt in ('slack', 'pdf')
+        msg = []
+        for r in deepcopy(self.results):
+            if fmt == 'slack':
+                player = ids.user_display(r['guesser'])
+            else:
+                player = r['guesser_name']
+            index = r['index']
+            guess = r['guess']
+            r_msg = '• {}: {}) {}'.format(player, index, guess)
+            msg.append(r_msg)
+        msg = '\n'.join(msg)
+        return msg
+
+    def build_signed_guesses_block(self):
+        msg = self.build_signed_guesses_msg('slack')
+        return blocks.build_text_block(msg)
+
+    def build_conclusion_block(self):
+        msg = self.build_conclusion_msg('slack')
+        return blocks.build_text_block(msg)
 
 
 
