@@ -36,8 +36,7 @@ def get_potential_guessers(slack_client, channel_id, organizer_id):
         c2 = not m['is_bot']
         c3 = not m['deleted']
         c4 = m['id'] != 'Truth'
-        # c5 = m['id'] != organizer_id
-        c5 = True
+        c5 = m['id'] != organizer_id
         if c1 and c2 and c3 and c4 and c5:
             res[m['id']] = user_info_to_user_name(m)
     return res

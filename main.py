@@ -309,8 +309,6 @@ def result_stage(event, context):
     game.build_voters()
     game.build_results()
 
-    print('RESULTS: {}'.format(game.results))
-
     game.compute_max_score()
     game.compute_winners()
     signed_guesses_block = game.build_signed_guesses_block()

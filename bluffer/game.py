@@ -3,6 +3,8 @@ from copy import deepcopy
 from slackclient import SlackClient
 from bluffer.utils import *
 
+from argparse import Namespace
+
 
 class Game:
     def __init__(
@@ -33,7 +35,6 @@ class Game:
 
         self.guesses = None
         self.guessers = None
-
         self.votes = None
         self.voters = None
         self.results = None
@@ -55,195 +56,234 @@ class Game:
     def get_game_ref(self):
         return firestore.get_game_ref(self.db, self.team_id, self.game_id)
 
-    def build_slack_object_id(self, object_name):
-        return ids.build_slack_object_id(self.secret_prefix,
-                                         object_name, self.game_id)
+    def ids(self):
 
-    def build_game_setup_view_id(self):
-        return self.build_slack_object_id('game_setup_view')
+        res = Namespace()
 
-    def build_guess_view_id(self):
-        return self.build_slack_object_id('guess_view')
+        def build_slack_object_id(object_name):
+            return ids.build_slack_object_id(
+                self.secret_prefix, object_name, self.game_id)
 
-    def build_vote_view_id(self):
-        return self.build_slack_object_id('vote_view')
+        def build_game_setup_view_id():
+            return build_slack_object_id('game_setup_view')
 
-    def build_guess_button_block_id(self):
-        return self.build_slack_object_id('guess_button_block')
+        res.build_game_setup_view_id = build_game_setup_view_id()
 
-    def build_vote_button_block_id(self):
-        return self.build_slack_object_id('vote_button_block')
+        def build_slack_object_id(self, object_name):
+            return ids.build_slack_object_id(self.secret_prefix,
+                                             object_name, self.game_id)
 
-    def build_game_setup_view(self):
-        id_ = self.build_game_setup_view_id()
-        return views.build_game_setup_view(id_)
+        def build_game_setup_view_id(self):
+            return self.build_slack_object_id('game_setup_view')
 
-    def build_guess_view(self):
-        id_ = self.build_guess_view_id()
-        return views.build_guess_view(id_, self.game_dict['question'])
+        def build_guess_view_id(self):
+            return self.build_slack_object_id('guess_view')
 
-    def build_vote_view(self, voter):
-        res = deepcopy(views.vote_view_template)
-        res['callback_id'] = self.build_vote_view_id()
-        input_block_template = res['blocks'][0]
-        votable_proposals_msg = ['Voting options:']
-        option_template = input_block_template['element']['options'][0]
-        vote_options = []
-        for index, proposal in self.build_votable_proposals(voter):
-            votable_proposals_msg.append('{}) {}'.format(index, proposal))
-            vote_option = deepcopy(option_template)
-            vote_option['text']['text'] = '{}'.format(index)
-            vote_option['value'] = '{}'.format(index)
-            vote_options.append(vote_option)
-        votable_proposals_msg = '\n'.join(votable_proposals_msg)
-        input_block = input_block_template
-        input_block['element']['options'] = vote_options
-        res['blocks'] = [self.build_own_guess_block(voter),
+        def build_vote_view_id(self):
+            return self.build_slack_object_id('vote_view')
+
+        def build_guess_button_block_id(self):
+            return self.build_slack_object_id('guess_button_block')
+
+        def build_vote_button_block_id(self):
+            return self.build_slack_object_id('vote_button_block')
+
+    def views(self):
+
+        def open_view(self, trigger_id, view):
+            views.open_view(self.slack_client, trigger_id, view)
+
+        def open_game_setup_view(self, trigger_id):
+            self.open_view(trigger_id, self.build_game_setup_view())
+
+        def build_game_setup_view(self):
+            id_ = self.build_game_setup_view_id()
+            return views.build_game_setup_view(id_)
+
+        def build_guess_view(self):
+            id_ = self.build_guess_view_id()
+            return views.build_guess_view(id_, self.game_dict['question'])
+
+        def build_vote_view(self, voter):
+            res = deepcopy(views.vote_view_template)
+            res['callback_id'] = self.build_vote_view_id()
+            input_block_template = res['blocks'][0]
+            votable_proposals_msg = ['Voting options:']
+            option_template = input_block_template['element']['options'][0]
+            vote_options = []
+            for index, proposal in self.build_votable_proposals(voter):
+                votable_proposals_msg.append('{}) {}'.format(index, proposal))
+                vote_option = deepcopy(option_template)
+                vote_option['text']['text'] = '{}'.format(index)
+                vote_option['value'] = '{}'.format(index)
+                vote_options.append(vote_option)
+            votable_proposals_msg = '\n'.join(votable_proposals_msg)
+            input_block = input_block_template
+            input_block['element']['options'] = vote_options
+            res['blocks'] = [self.build_own_guess_block(voter),
                          blocks.build_text_block(votable_proposals_msg),
                          input_block]
-        return res
+            return res
 
-    def open_view(self, trigger_id, view):
-        views.open_view(self.slack_client, trigger_id, view)
+        def open_guess_view(self, trigger_id):
+            self.open_view(trigger_id, self.build_guess_view())
 
-    def open_game_setup_view(self, trigger_id):
-        self.open_view(trigger_id, self.build_game_setup_view())
+    def pubsub(self):
 
-    def open_guess_view(self, trigger_id):
-        self.open_view(trigger_id, self.build_guess_view())
+        def build_topic_path(self, topic_name):
+            return pubsub.build_topic_path(
+                self.publisher, self.project_id, topic_name)
 
-    def build_topic_path(self, topic_name):
-        return pubsub.build_topic_path(
-            self.publisher, self.project_id, topic_name)
+        def publish(self, topic_name):
+            topic_path = self.build_topic_path(topic_name)
+            self.publisher.publish(topic_path, data=self.code)
 
-    def publish(self, topic_name):
-        topic_path = self.build_topic_path(topic_name)
-        self.publisher.publish(topic_path, data=self.code)
+        def trigger_pre_guess_stage(self):
+            self.publish('topic_pre_guess_stage')
 
-    def trigger_pre_guess_stage(self):
-        self.publish('topic_pre_guess_stage')
+        def trigger_guess_stage(self):
+            self.publish('topic_guess_stage')
 
-    def trigger_guess_stage(self):
-        self.publish('topic_guess_stage')
+        def trigger_pre_vote_stage(self):
+            self.publish('topic_pre_vote_stage')
 
-    def trigger_pre_vote_stage(self):
-        self.publish('topic_pre_vote_stage')
+        def trigger_vote_stage(self):
+            self.publish('topic_vote_stage')
 
-    def trigger_vote_stage(self):
-        self.publish('topic_vote_stage')
+        def trigger_result_stage(self):
+            self.publish('topic_result_stage')
 
-    def trigger_result_stage(self):
-        self.publish('topic_result_stage')
+    def slack(self):
 
-    def post_message(self, blocks_):
-        return self.slack_client.api_call(
-            'chat.postMessage',
-            channel=self.channel_id,
-            blocks=blocks_)['ts']
+        def post_message(self, blocks_):
+            return self.slack_client.api_call(
+                'chat.postMessage',
+                channel=self.channel_id,
+                blocks=blocks_)['ts']
 
-    def post_ephemeral(self, user_id, msg):
-        self.slack_client.api_call(
-            'chat.postEphemeral',
-            channel=self.channel_id,
-            user=user_id,
-            text=msg)
+        def post_ephemeral(self, user_id, msg):
+            self.slack_client.api_call(
+                'chat.postEphemeral',
+                channel=self.channel_id,
+                user=user_id,
+                text=msg)
 
-    def update_message(self, blocks_, ts):
-        self.slack_client.api_call(
-            'chat.update',
-            channel=self.channel_id,
-            ts=ts,
-            blocks=blocks_)
+        def update_message(self, blocks_, ts):
+            self.slack_client.api_call(
+                'chat.update',
+                channel=self.channel_id,
+                ts=ts,
+                blocks=blocks_)
 
-    def update_upper(self, blocks_):
-        self.update_message(blocks_, self.game_dict['upper_ts'])
+        def update_upper(self, blocks_):
+            self.update_message(blocks_, self.game_dict['upper_ts'])
 
-    def update_lower(self, blocks_):
-        self.update_message(blocks_, self.game_dict['lower_ts'])
+        def update_lower(self, blocks_):
+            self.update_message(blocks_, self.game_dict['lower_ts'])
 
-    def update_guess_stage_lower(self):
-        guess_stage_lower_blocks = self.build_guess_stage_lower_blocks()
-        self.update_lower(guess_stage_lower_blocks)
+        def update_guess_stage_lower(self):
+            guess_stage_lower_blocks = self.build_guess_stage_lower_blocks()
+            self.update_lower(guess_stage_lower_blocks)
 
-    def update_vote_stage_lower(self):
-        vote_stage_lower_blocks = self.build_vote_stage_lower_blocks()
-        self.update_lower(vote_stage_lower_blocks)
+        def update_vote_stage_lower(self):
+            vote_stage_lower_blocks = self.build_vote_stage_lower_blocks()
+            self.update_lower(vote_stage_lower_blocks)
 
-    def build_title_block(self):
-        msg = 'Game set up by {}!'.format(ids.user_display(self.organizer_id))
-        return blocks.build_text_block(msg)
+    def blocks(self):
 
-    def build_question_block(self):
-        return blocks.build_text_block(self.game_dict['question'])
-
-    def build_guess_button_block(self):
-        id_ = self.build_guess_button_block_id()
-        return blocks.build_button_block('Your guess', id_)
-
-    def build_vote_button_block(self):
-        id_ = self.build_vote_button_block_id()
-        return blocks.build_button_block('Your vote', id_)
-
-    @staticmethod
-    def build_preparing_guess_stage_block():
-        return blocks.build_text_block('Preparing guess stage...')
-
-    @staticmethod
-    def build_preparing_vote_stage_block():
-        return blocks.build_text_block('Preparing vote stage...')
-
-    @staticmethod
-    def build_computing_results_stage_block():
-        return blocks.build_text_block('Computing results...')
-
-    @staticmethod
-    def build_pre_results_stage_block():
-        return blocks.build_text_block(
-            'Computing results :drum_with_drumsticks:')
-
-    def build_guess_timer_block(self):
-        time_left = self.compute_time_left_to_guess()
-        return blocks.build_guess_timer_block(time_left)
-
-    def build_vote_timer_block(self):
-        time_left = self.compute_time_left_to_vote()
-        return blocks.build_vote_timer_block(time_left)
-
-    def build_users_blocks(self, kind):
-        assert kind in ('guessers', 'voters')
-        past_participle = 'guessed' if kind == 'guessers' else 'voted'
-        users = self.game_dict[kind]
-        users = sorted(users, key=lambda k: users[k][0])
-        if not users:
-            msg = 'No one has {} yet.'.format(past_participle)
+        def build_title_block(self):
+            msg = 'Game set up by {}!'.format(ids.user_display(self.organizer_id))
             return blocks.build_text_block(msg)
-        user_displays = ids.user_displays(users)
-        msg = '{}: {}'.format(kind.title(), user_displays)
-        return blocks.build_text_block(msg)
 
-    def build_guessers_block(self):
-        return self.build_users_blocks('guessers')
+        def build_question_block(self):
+            return blocks.build_text_block(self.game_dict['question'])
 
-    def build_voters_block(self):
-        return self.build_users_blocks('voters')
+        def build_guess_button_block(self):
+            id_ = self.build_guess_button_block_id()
+            return blocks.build_button_block('Your guess', id_)
 
-    def build_guess_stage_lower_blocks(self):
-        guess_timer_block = self.build_guess_timer_block()
-        guessers_block = self.build_guessers_block()
-        return blocks.d([guess_timer_block, guessers_block])
+        def build_vote_button_block(self):
+            id_ = self.build_vote_button_block_id()
+            return blocks.build_button_block('Your vote', id_)
 
-    def build_vote_stage_lower_blocks(self):
-        vote_timer_block = self.build_vote_timer_block()
-        voters_block = self.build_voters_block()
-        return blocks.d([vote_timer_block, voters_block])
+        @staticmethod
+        def build_preparing_guess_stage_block():
+            return blocks.build_text_block('Preparing guess stage...')
 
-    def build_anonymous_proposals_block(self):
-        msg = ['Proposals:']
-        proposals = self.to_python_proposals(self.game_dict['proposals'])
-        for index, author, proposal in proposals:
-            msg.append('{}) {}'.format(index, proposal))
-        msg = '\n'.join(msg)
-        return blocks.build_text_block(msg)
+        @staticmethod
+        def build_preparing_vote_stage_block():
+            return blocks.build_text_block('Preparing vote stage...')
+
+        @staticmethod
+        def build_computing_results_stage_block():
+            return blocks.build_text_block(
+                'Computing results :drum_with_drumsticks:')
+
+        def build_guess_timer_block(self):
+            time_left = self.compute_time_left_to_guess()
+            return blocks.build_guess_timer_block(time_left)
+
+        def build_vote_timer_block(self):
+            time_left = self.compute_time_left_to_vote()
+            return blocks.build_vote_timer_block(time_left)
+
+        def build_users_blocks(self, kind):
+            assert kind in ('guessers', 'voters')
+            past_participle = 'guessed' if kind == 'guessers' else 'voted'
+            users = self.game_dict[kind]
+            users = sorted(users, key=lambda k: users[k][0])
+            if not users:
+                msg = 'No one has {} yet.'.format(past_participle)
+                return blocks.build_text_block(msg)
+            user_displays = ids.user_displays(users)
+            msg = '{}: {}'.format(kind.title(), user_displays)
+            return blocks.build_text_block(msg)
+
+        def build_guessers_block(self):
+            return self.build_users_blocks('guessers')
+
+        def build_voters_block(self):
+            return self.build_users_blocks('voters')
+
+        def build_guess_stage_lower_blocks(self):
+            guess_timer_block = self.build_guess_timer_block()
+            guessers_block = self.build_guessers_block()
+            return blocks.d([guess_timer_block, guessers_block])
+
+        def build_vote_stage_lower_blocks(self):
+            vote_timer_block = self.build_vote_timer_block()
+            voters_block = self.build_voters_block()
+            return blocks.d([vote_timer_block, voters_block])
+
+        def build_anonymous_proposals_block(self):
+            msg = ['Proposals:']
+            proposals = self.to_python_proposals(self.game_dict['proposals'])
+            for index, author, proposal in proposals:
+                msg.append('{}) {}'.format(index, proposal))
+            msg = '\n'.join(msg)
+            return blocks.build_text_block(msg)
+
+        def build_own_guess_block(self, voter):
+            index = self.author_to_index(voter)
+            guess = self.author_to_proposal(voter)
+            msg = 'Your guess: {}) {}'.format(index, guess)
+            return blocks.build_text_block(msg)
+
+        def build_signed_guesses_block(self):
+            msg = self.build_signed_guesses_msg('slack')
+            return blocks.build_text_block(msg)
+
+        def build_conclusion_block(self):
+            msg = self.build_conclusion_msg('slack')
+            return blocks.build_text_block(msg)
+
+    def time(self):
+
+        def compute_time_left_to_guess(self):
+            return timer.compute_time_left(self.game_dict['guess_deadline'])
+
+        def compute_time_left_to_vote(self):
+            return timer.compute_time_left(self.game_dict['vote_deadline'])
 
     def get_potential_guessers(self):
         return members.get_potential_guessers(
@@ -258,12 +298,6 @@ class Game:
         potential_voters = self.game_dict['potential_voters']
         voters = self.game_dict['voters']
         return set(potential_voters) - set(voters)
-
-    def compute_time_left_to_guess(self):
-        return timer.compute_time_left(self.game_dict['guess_deadline'])
-
-    def compute_time_left_to_vote(self):
-        return timer.compute_time_left(self.game_dict['vote_deadline'])
 
     def send_vote_reminders(self):
         time_left_to_vote = self.compute_time_left_to_guess()
@@ -311,12 +345,6 @@ class Game:
             if author != voter:
                 res.append((index, proposal))
         return res
-
-    def build_own_guess_block(self, voter):
-        index = self.author_to_index(voter)
-        guess = self.author_to_proposal(voter)
-        msg = 'Your guess: {}) {}'.format(index, guess)
-        return blocks.build_text_block(msg)
 
     def index_to_author(self, index):
         for index_, author, proposal in self.get_python_proposals():
@@ -489,13 +517,8 @@ class Game:
         msg = '\n'.join(msg)
         return msg
 
-    def build_signed_guesses_block(self):
-        msg = self.build_signed_guesses_msg('slack')
-        return blocks.build_text_block(msg)
 
-    def build_conclusion_block(self):
-        msg = self.build_conclusion_msg('slack')
-        return blocks.build_text_block(msg)
+
 
 
 
