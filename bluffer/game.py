@@ -1,4 +1,7 @@
+import os
 import random
+import networkx as nx
+import matplotlib.pyplot as plt
 from copy import deepcopy
 from slackclient import SlackClient
 from bluffer.utils import *
@@ -13,6 +16,9 @@ class Base:
             project_id,
             publisher,
             db,
+            bucket,
+            bucket_dir_name,
+            local_dir_path,
             logger
     ):
         self.game_id = game_id
@@ -21,6 +27,9 @@ class Base:
         self.project_id = project_id
         self.publisher = publisher
         self.db = db
+        self.bucket = bucket
+        self.bucket_dir_name = bucket_dir_name
+        self.local_dir_path = local_dir_path
         self.logger = logger
 
         self.team_id = ids.game_id_to_team_id(self.game_id)
@@ -32,13 +41,20 @@ class Base:
 
         self.slack_client = None
 
+        self.graph_basename = None
+        self.graph_local_path = None
+
+        self.start_datetime = None
+
         self.guesses = None
         self.guessers = None
         self.votes = None
         self.voters = None
+        self.truth_index = None
         self.results = None
         self.winners = None
         self.max_score = None
+        self.graph = None
 
     def compute_remaining_potential_guessers(self):
         potential_guessers = self.game_dict['potential_guessers']
@@ -173,6 +189,39 @@ class Base:
         scores = [r['score'] for r in self.results if 'score' in r]
         self.max_score = scores[0]
 
+    def compute_basename(self, core_name, ext):
+        return '{}_{}_{}.{}'.format(
+                    self.start_datetime.strftime('%Y%m%d_%H%M%S'),
+                    core_name, self.game_id, ext)
+
+    def compute_graph_basename(self):
+        return self.compute_basename('graph', 'png')
+
+    def compute_local_path(self, basename):
+        return self.local_dir_path + '/' + basename
+
+    def compute_graph_local_path(self):
+        return self.compute_local_path(self.graph_basename)
+
+
+class Storage(Base):
+
+    def upload_to_gs(self, local_file_path, sub_dir_name):
+        assert sub_dir_name in ('graphs', 'reports')
+        basename = os.path.basename(local_file_path)
+
+        blob_name = '{}/{}/{}'.format(
+            self.bucket_dir_name, sub_dir_name, basename)
+
+        blob = self.bucket.blob(blob_name)
+
+        blob.upload_from_filename(local_file_path)
+
+        return blob.public_url
+
+    def upload_graph_to_gs(self):
+        return self.upload_to_gs(self.graph_local_path, 'graphs')
+
 
 class PubSub(Base):
 
@@ -216,6 +265,53 @@ class Firestore(Base):
 
     def get_game_ref(self):
         return firestore.get_game_ref(self.db, self.team_id, self.game_id)
+
+
+class Graph(Base):
+
+    def build_graph(self):
+        res = nx.DiGraph()
+        res.add_node(self.truth_index)
+        for r in self.results:
+            res.add_node(r['index'])
+            if 'vote_index' in r:
+                res.add_edge(r['index'], r['vote_index'])
+        return res
+
+    def draw_graph(self):
+        g = self.graph
+
+        side_length = int(len(self.guessers)/2) + 7
+
+        plt.figure(figsize=(side_length, side_length))
+
+        plt.title('Voting graph')
+        pos = nx.circular_layout(g)
+
+        nx.draw_networkx_nodes(g, pos, node_color='#cc66ff', alpha=0.3,
+                               node_size=1000)
+
+        nx.draw_networkx_edges(g, pos, alpha=1.0, arrows=True, width=1.0)
+
+        truth_label = {self.truth_index: 'Truth'}
+        nx.draw_networkx_labels(g, pos, labels=truth_label, font_color='r')
+
+        guesser_labels = {r['index']: '{}\n{}'.format(r['guesser_name'],
+                                                      r['score'])
+                          for r in self.results}
+
+        indexes_of_winners = set(r['index'] for r in self.results
+                                 if r['guesser'] in self.winners)
+        indexes_of_losers = set(r['index'] for r in self.results
+                                if r['guesser'] not in self.winners)
+
+        winner_labels = {k: guesser_labels[k] for k in indexes_of_winners}
+        loser_labels = {k: guesser_labels[k] for k in indexes_of_losers}
+
+        nx.draw_networkx_labels(g, pos, labels=loser_labels, font_color='b')
+        nx.draw_networkx_labels(g, pos, labels=winner_labels, font_color='g')
+
+        plt.savefig(self.graph_local_path)
 
 
 class Ids(Base):
@@ -472,6 +568,12 @@ class Slack(Views):
             ts=ts,
             blocks=blocks_)
 
+    def open_view(self, trigger_id, view):
+        self.slack_client.api_call(
+            'views.open',
+            trigger_id=trigger_id,
+            view=view)
+
     def update_upper(self, blocks_):
         self.update_message(blocks_, self.game_dict['upper_ts'])
 
@@ -485,9 +587,6 @@ class Slack(Views):
     def update_vote_stage_lower(self):
         vote_stage_lower_blocks = self.build_vote_stage_lower_blocks()
         self.update_lower(vote_stage_lower_blocks)
-
-    def open_view(self, trigger_id, view):
-        views.open_view(self.slack_client, trigger_id, view)
 
     def open_game_setup_view(self, trigger_id):
         self.open_view(trigger_id, self.build_game_setup_view())

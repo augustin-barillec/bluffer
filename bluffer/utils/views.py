@@ -26,11 +26,7 @@ def build_guess_view(id_, question):
     return res
 
 
-def open_view(slack_client, trigger_id, view):
-    slack_client.api_call(
-        'views.open',
-        trigger_id=trigger_id,
-        view=view)
+
 
 
 def collect_game_setup(game_setup_view):
