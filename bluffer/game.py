@@ -70,8 +70,7 @@ class Base:
         self.potential_guessers = None
         self.potential_voters = None
 
-        self.firestore_proposals = None
-        self.python_proposals = None
+        self.proposals = None
 
         self.guess_start = None
         self.vote_start = None
@@ -298,29 +297,30 @@ class PubSub(Base):
         self.publish('topic_result_stage')
 
 
-class Firestore(Base):
+class Firestore(Proposals):
 
     def get_team_dict(self):
         self.team_dict = firestore.team_id_to_team_dict(
             self.db, self.team_id)
-        token = self.team_dict['token']
-        self.slack_client = SlackClient(token=token)
-        for key in self.team_dict:
-            self.__dict__[key] = self.team_dict
-        return self.team_dict
-
-    @staticmethod
-    def diffuse_dict(d):
-        for key in d:
-            self.__dict__[key]
-
-    def diffuse_team_dict(self):
-        for key in
 
     def get_game_dict(self):
         self.game_dict = firestore.get_game_dict(
             self.db, self.team_id, self.game_id)
-        return self.game_dict
+
+    def diffuse_dict(self, d):
+        for key in d:
+            d[key] = self.__dict__[key]
+
+    def diffuse_team_dict(self):
+        self.diffuse_dict(self.team_dict)
+        self.slack_client = SlackClient(token=self.slack_token)
+
+    def diffuse_game_dict(self):
+        self.diffuse_dict(self.game_dict)
+        self.proposals = self.to_firestore_proposals(self.proposals)
+
+
+
 
     def get_game_ref(self):
         return firestore.get_game_ref(self.db, self.team_id, self.game_id)
