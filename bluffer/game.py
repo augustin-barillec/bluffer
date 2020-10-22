@@ -22,7 +22,6 @@ class Base:
             logger
     ):
         self.game_id = game_id
-        self.code = self.game_id.encode("utf-8")
         self.secret_prefix = secret_prefix
         self.project_id = project_id
         self.publisher = publisher
@@ -32,6 +31,8 @@ class Base:
         self.local_dir_path = local_dir_path
         self.logger = logger
 
+        self.code = self.game_id.encode("utf-8")
+
         self.team_id = ids.game_id_to_team_id(self.game_id)
         self.organizer_id = ids.game_id_to_organizer_id(self.game_id)
         self.channel_id = ids.game_id_to_channel_id(self.game_id)
@@ -39,12 +40,13 @@ class Base:
         self.team_dict = None
         self.game_dict = None
 
+        self.game_creation_ts = None
+
+        self.slack_token = None
         self.slack_client = None
 
         self.graph_basename = None
         self.graph_local_path = None
-
-        self.start_datetime = None
 
         self.guesses = None
         self.guessers = None
@@ -56,6 +58,32 @@ class Base:
         self.max_score = None
         self.graph = None
 
+        self.lower_ts = None
+        self.upper_ts = None
+
+        self.question = None
+        self.truth = None
+
+        self.time_to_guess = None
+        self.time_to_vote = None
+
+        self.potential_guessers = None
+        self.potential_voters = None
+
+        self.firestore_proposals = None
+        self.python_proposals = None
+
+        self.guess_start = None
+        self.vote_start = None
+
+        self.guess_deadline = None
+        self.vote_deadline = None
+
+    def get_slack_token(self):
+        self.slack_token = self.team_dict['token']
+
+class RemainingPlayers(Base):
+
     def compute_remaining_potential_guessers(self):
         potential_guessers = self.game_dict['potential_guessers']
         guessers = self.game_dict['guessers']
@@ -65,6 +93,33 @@ class Base:
         potential_voters = self.game_dict['potential_voters']
         voters = self.game_dict['voters']
         return set(potential_voters) - set(voters)
+
+
+class Proposals(Base):
+
+    def index_to_author(self, index):
+        for index_, author, proposal in self.get_python_proposals():
+            if index_ == index:
+                return author
+
+    def author_to_index(self, author):
+        for index, author_, proposal in self.get_python_proposals():
+            if author == author_:
+                return index
+
+    def author_to_proposal(self, author):
+        for index_, author_, proposal in self.get_python_proposals():
+            if author_ == author:
+                return proposal
+
+    def build_frozen_guesses(self):
+        self.guesses = {
+            guesser: self.game_dict['frozen_guessers'][guesser][1]
+            for guesser in self.game_dict['frozen_guessers']
+        }
+
+    def build_frozen_guessers(self):
+        self.guessers = list(self.guesses.keys())
 
     @staticmethod
     def to_firestore_proposals(python_proposals):
@@ -94,6 +149,11 @@ class Base:
     def get_python_proposals(self):
         return self.to_python_proposals(self.game_dict['proposals'])
 
+    def build_own_guess(self, guesser):
+        index = self.author_to_index(guesser)
+        guess = self.author_to_proposal(guesser)
+        return index, guess
+
     def build_votable_proposals(self, voter):
         proposals = self.get_python_proposals()
         res = []
@@ -102,20 +162,49 @@ class Base:
                 res.append((index, proposal))
         return res
 
-    def index_to_author(self, index):
-        for index_, author, proposal in self.get_python_proposals():
-            if index_ == index:
-                return author
+    def build_anonymous_proposals(self):
+        res = []
+        proposals = self.to_python_proposals(self.game_dict['proposals'])
+        for index, author, proposal in proposals:
+            res.append((index, proposal))
+        return res
 
-    def author_to_index(self, author):
-        for index, author_, proposal in self.get_python_proposals():
-            if author == author_:
-                return index
 
-    def author_to_proposal(self, author):
-        for index_, author_, proposal in self.get_python_proposals():
-            if author_ == author:
-                return proposal
+class Results(Proposals):
+
+    def get_guesser_name(self, guesser):
+        return self.game_dict['potential_guessers'][guesser]
+
+    def build_frozen_votes(self):
+        self.votes = {
+            voter: self.game_dict['frozen_voters'][voter][1]
+            for voter in self.game_dict['frozen_voters']
+        }
+
+    def build_frozen_voters(self):
+        self.voters = list(self.votes.keys())
+
+    def compute_truth_score(self, voter):
+        return int(self.votes[voter] == self.author_to_index('Truth'))
+
+    def compute_bluff_score(self, voter):
+        res = 0
+        for voter_ in self.votes.keys():
+            voter_index = self.author_to_index(voter)
+            if self.votes[voter_] == voter_index:
+                res += 2
+        return res
+
+    def compute_winners(self):
+        res = []
+        for r in self.results:
+            if r['score'] == self.max_score:
+                res.append(r['guesser'])
+        self.winners = res
+
+    def compute_max_score(self):
+        scores = [r['score'] for r in self.results if 'score' in r]
+        self.max_score = scores[0]
 
     def build_results(self):
         results = []
@@ -146,52 +235,12 @@ class Base:
 
         self.results = results
 
-    def compute_truth_score(self, voter):
-        return int(self.votes[voter] == self.author_to_index('Truth'))
 
-    def compute_bluff_score(self, voter):
-        res = 0
-        for voter_ in self.votes.keys():
-            voter_index = self.author_to_index(voter)
-            if self.votes[voter_] == voter_index:
-                res += 2
-        return res
-
-    def get_guesser_name(self, guesser):
-        return self.game_dict['potential_guessers'][guesser]
-
-    def build_guesses(self):
-        self.guesses = {
-            guesser: self.game_dict['frozen_guessers'][guesser][1]
-            for guesser in self.game_dict['frozen_guessers']
-        }
-
-    def build_votes(self):
-        self.votes = {
-            voter: self.game_dict['frozen_voters'][voter][1]
-            for voter in self.game_dict['frozen_voters']
-        }
-
-    def build_guessers(self):
-        self.guessers = list(self.guesses.keys())
-
-    def build_voters(self):
-        self.voters = list(self.votes.keys())
-
-    def compute_winners(self):
-        res = []
-        for r in self.results:
-            if r['score'] == self.max_score:
-                res.append(r['guesser'])
-        self.winners = res
-
-    def compute_max_score(self):
-        scores = [r['score'] for r in self.results if 'score' in r]
-        self.max_score = scores[0]
+class Local(Base):
 
     def compute_basename(self, core_name, ext):
         return '{}_{}_{}.{}'.format(
-                    self.start_datetime.strftime('%Y%m%d_%H%M%S'),
+                    self.guess_start.strftime('%Y%m%d_%H%M%S'),
                     core_name, self.game_id, ext)
 
     def compute_graph_basename(self):
@@ -256,7 +305,17 @@ class Firestore(Base):
             self.db, self.team_id)
         token = self.team_dict['token']
         self.slack_client = SlackClient(token=token)
+        for key in self.team_dict:
+            self.__dict__[key] = self.team_dict
         return self.team_dict
+
+    @staticmethod
+    def diffuse_dict(d):
+        for key in d:
+            self.__dict__[key]
+
+    def diffuse_team_dict(self):
+        for key in
 
     def get_game_dict(self):
         self.game_dict = firestore.get_game_dict(
@@ -345,7 +404,7 @@ class Time(Base):
         return timer.compute_time_left(self.game_dict['vote_deadline'])
 
 
-class Blocks(Time, Ids):
+class Blocks(Time, Ids, Results):
 
     def build_title_block(self):
         msg = 'Game set up by {}!'.format(ids.user_display(self.organizer_id))
@@ -413,15 +472,14 @@ class Blocks(Time, Ids):
 
     def build_anonymous_proposals_block(self):
         msg = ['Proposals:']
-        proposals = self.to_python_proposals(self.game_dict['proposals'])
-        for index, author, proposal in proposals:
+        anonymous_proposals = self.build_anonymous_proposals()
+        for index, proposal in anonymous_proposals:
             msg.append('{}) {}'.format(index, proposal))
         msg = '\n'.join(msg)
         return blocks.build_text_block(msg)
 
     def build_own_guess_block(self, voter):
-        index = self.author_to_index(voter)
-        guess = self.author_to_proposal(voter)
+        index, guess = self.build_own_guess(voter)
         msg = 'Your guess: {}) {}'.format(index, guess)
         return blocks.build_text_block(msg)
 
@@ -616,34 +674,6 @@ class Slack(Views):
             self.post_ephemeral(u, msg)
 
 
-class Game(Slack, PubSub, Firestore):
+class Game(RemainingPlayers, Slack, PubSub, Firestore):
 
     pass
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
