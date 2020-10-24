@@ -26,7 +26,7 @@ with open(os.path.join(dir_path, 'project_id.txt')) as f:
     project_id = list(f)[0]
 
 
-def build_game(game_id):
+def build_game(game_id, fetch_game_data):
     return Game(
         game_id=game_id,
         secret_prefix=SECRET_PREFIX,

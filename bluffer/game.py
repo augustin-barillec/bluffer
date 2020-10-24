@@ -33,38 +33,38 @@ class Voters:
 class Proposals(Guessers):
 
     truth = None
-    proposals = None
+    indexed_signed_proposals = None
     truth_index = None
 
     def index_to_author(self, index):
-        for index_, author, proposal in self.proposals:
+        for index_, author, proposal in self.indexed_signed_proposals:
             if index_ == index:
                 return author
 
     def author_to_index(self, author):
-        for index, author_, proposal in self.proposals:
+        for index, author_, proposal in self.indexed_signed_proposals:
             if author == author_:
                 return index
 
     def author_to_proposal(self, author):
-        for index_, author_, proposal in self.proposals:
+        for index_, author_, proposal in self.indexed_signed_proposals:
             if author_ == author:
                 return proposal
 
     @staticmethod
-    def to_firestore_proposals(python_proposals):
+    def to_firestore_indexed_signed_proposals(python_isp):
         return {str(index): [author, proposal]
-                for index, author, proposal in python_proposals}
+                for index, author, proposal in python_isp}
 
     @staticmethod
-    def to_python_proposals(firestore_proposals):
+    def to_python_indexed_signed_proposals(firestore_isp):
         return [
             (int(index),
-             firestore_proposals[index][0],
-             firestore_proposals[index][1])
-            for index in firestore_proposals]
+             firestore_isp[index][0],
+             firestore_isp[index][1])
+            for index in firestore_isp]
 
-    def build_proposals(self):
+    def build_indexed_signed_proposals(self):
         res = [(k, self.frozen_guessers[k][1]) for k in self.frozen_guessers]
         res.append(('Truth', self.truth))
         random.shuffle(res)
@@ -72,26 +72,26 @@ class Proposals(Guessers):
                for index, (author, proposal) in enumerate(res, 1)]
         return res
 
-    def get_proposals(self):
-        return self.to_python_proposals(self.proposals)
-
     def build_own_guess(self, guesser):
         index = self.author_to_index(guesser)
         guess = self.author_to_proposal(guesser)
         return index, guess
 
-    def build_votable_proposals(self, voter):
+    def build_votable_indexed_anonymous_proposals(self, voter):
         res = []
-        for index, author, proposal in self.proposals:
+        for index, author, proposal in self.indexed_signed_proposals:
             if author != voter:
                 res.append((index, proposal))
         return res
 
-    def build_anonymous_proposals(self):
+    def build_indexed_anonymous_proposals(self):
         res = []
-        for index, author, proposal in self.proposals:
+        for index, author, proposal in self.indexed_signed_proposals:
             res.append((index, proposal))
         return res
+
+    def compute_truth_index(self):
+        return self.author_to_index('Truth')
 
 
 class Results(Proposals, Voters):
@@ -125,7 +125,7 @@ class Results(Proposals, Voters):
 
     def build_results(self):
         results = []
-        for index, author, proposal in self.proposals:
+        for index, author, proposal in self.indexed_signed_proposals:
             r = dict()
             if author == 'Truth':
                 continue
@@ -649,7 +649,8 @@ class Game(Slack, Storage, PubSub, Firestore):
             bucket,
             bucket_dir_name,
             local_dir_path,
-            logger
+            logger,
+            fetch_game_data=True
     ):
         self.game_id = game_id
         self.secret_prefix = secret_prefix
@@ -662,7 +663,18 @@ class Game(Slack, Storage, PubSub, Firestore):
         self.logger = logger
 
         self.get_team_dict()
-        self.get_game_dict()
+        self.diffuse_team_dict()
+
+        self.slack_client = SlackClient(token=self.slack_token)
+
+        if fetch_game_data:
+            self.get_game_dict()
+            self.diffuse_game_dict()
+
+        if self.indexed_signed_proposals is not None:
+            self.indexed_signed_proposals = \
+                self.to_python_indexed_signed_proposals(
+                    self.indexed_signed_proposals)
 
     def diffuse_dict(self, d):
         for key in d:
