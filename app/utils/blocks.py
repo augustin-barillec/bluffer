@@ -1,6 +1,6 @@
 from copy import deepcopy
-from bluffer.utils.jsons import get_json
-from bluffer.utils.timer import build_time_display
+from app.utils.jsons import get_json
+from app.utils.timer import build_time_display
 
 
 def get_block(basename):

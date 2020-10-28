@@ -2,38 +2,47 @@ import os
 import time
 import pytz
 import json
+import yaml
 import logging
-from bluffer.game import Game
 
 from copy import deepcopy
 from flask import make_response
-from google.cloud import pubsub_v1
+from google.cloud import pubsub_v1, firestore, storage
 from datetime import datetime
-from bluffer.utils import *
-from google.cloud import firestore
+
+from app.game import Game
+from app.utils import ids
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
                     level='INFO')
 logger = logging.getLogger()
 
-db = firestore.Client()
-publisher = pubsub_v1.PublisherClient()
-
-SECRET_PREFIX = 'secret_prefix'
-
 dir_path = os.path.realpath(os.path.dirname(__file__))
-with open(os.path.join(dir_path, 'project_id.txt')) as f:
-    project_id = list(f)[0]
+with open(os.path.join(dir_path, 'conf.yaml')) as f:
+    conf = yaml.safe_load(f)
+
+project_id = conf['project_id']
+bucket_name = conf['bucket_name']
+secret_prefix = conf['secret_prefix']
+
+publisher = pubsub_v1.PublisherClient(project=project_id)
+db = firestore.Client(project=project_id)
+storage_client = storage.Client(project=project_id)
+bucket = storage_client.bucket(bucket_name)
 
 
-def build_game(game_id, fetch_game_data):
+def build_game(game_id):
     return Game(
         game_id=game_id,
-        secret_prefix=SECRET_PREFIX,
+        secret_prefix=secret_prefix,
         project_id=project_id,
         publisher=publisher,
         db=db,
-        logger=logger)
+        bucket=bucket,
+        logger=logger,
+        bucket_dir_name=bucket_dir_name,
+        local_dir_path=local_dir_path,
+        fetch_game_data=fetch_game_data)
 
 
 def slack_command(request):

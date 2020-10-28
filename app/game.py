@@ -4,7 +4,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from copy import deepcopy
 from slackclient import SlackClient
-from bluffer.utils import *
+from app.utils import *
 
 
 class Guessers:
@@ -36,21 +36,6 @@ class Proposals(Guessers):
     indexed_signed_proposals = None
     truth_index = None
 
-    def index_to_author(self, index):
-        for index_, author, proposal in self.indexed_signed_proposals:
-            if index_ == index:
-                return author
-
-    def author_to_index(self, author):
-        for index, author_, proposal in self.indexed_signed_proposals:
-            if author == author_:
-                return index
-
-    def author_to_proposal(self, author):
-        for index_, author_, proposal in self.indexed_signed_proposals:
-            if author_ == author:
-                return proposal
-
     @staticmethod
     def to_firestore_indexed_signed_proposals(python_isp):
         return {str(index): [author, proposal]
@@ -72,7 +57,22 @@ class Proposals(Guessers):
                for index, (author, proposal) in enumerate(res, 1)]
         return res
 
-    def build_own_guess(self, guesser):
+    def index_to_author(self, index):
+        for index_, author, proposal in self.indexed_signed_proposals:
+            if index_ == index:
+                return author
+
+    def author_to_index(self, author):
+        for index, author_, proposal in self.indexed_signed_proposals:
+            if author == author_:
+                return index
+
+    def author_to_proposal(self, author):
+        for index_, author_, proposal in self.indexed_signed_proposals:
+            if author_ == author:
+                return proposal
+
+    def build_own_indexed_guess(self, guesser):
         index = self.author_to_index(guesser)
         guess = self.author_to_proposal(guesser)
         return index, guess
@@ -650,7 +650,7 @@ class Game(Slack, Storage, PubSub, Firestore):
             bucket_dir_name,
             local_dir_path,
             logger,
-            fetch_game_data=True
+            fetch_game_data
     ):
         self.game_id = game_id
         self.secret_prefix = secret_prefix

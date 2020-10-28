@@ -1,5 +1,5 @@
 from copy import deepcopy
-from bluffer.utils import jsons, blocks
+from app.utils import jsons, blocks
 
 
 def get_view(basename):
@@ -24,9 +24,6 @@ def build_guess_view(id_, question):
     question_block = blocks.build_text_block(question)
     res['blocks'] = [question_block, input_block]
     return res
-
-
-
 
 
 def collect_game_setup(game_setup_view):
