@@ -2,7 +2,8 @@
 
 source ./ports.sh
 
-PROJECT_ID=$(head -n 1 ../project_id.txt)
+PROJECT_ID=$(head -n 1 ../conf.yaml)
+PROJECT_ID=${PROJECT_ID#"project_id: "}
 
 PORT=8085
 kill -9 $(lsof -t -i tcp:$PORT)

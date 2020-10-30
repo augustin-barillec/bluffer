@@ -4,7 +4,7 @@ venv
 
 dev/credentials.json
 dev/ngrok
-dev/*.log
+dev/*.txt
 dev/*.out
 
 conf.yaml

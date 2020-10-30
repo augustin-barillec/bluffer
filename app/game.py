@@ -33,6 +33,7 @@ class Voters:
 class Proposals(Guessers):
 
     truth = None
+    firestore_indexed_signed_proposals = None
     indexed_signed_proposals = None
     truth_index = None
 
@@ -153,35 +154,6 @@ class Results(Proposals, Voters):
         self.results = results
 
 
-class Time:
-
-    game_creation_ts = None
-
-    time_to_guess = None
-    time_to_vote = None
-
-    upper_ts = None
-    lower_ts = None
-
-    guess_start = None
-    vote_start = None
-
-    guess_deadline = None
-    vote_deadline = None
-
-    def compute_guess_deadline(self):
-        return timer.compute_deadline(self.guess_start, self.time_to_guess)
-
-    def compute_vote_deadline(self):
-        return timer.compute_deadline(self.vote_start, self.time_to_vote)
-
-    def compute_time_left_to_guess(self):
-        return timer.compute_time_left(self.guess_deadline)
-
-    def compute_time_left_to_vote(self):
-        return timer.compute_time_left(self.vote_deadline)
-
-
 class Ids:
 
     secret_prefix = None
@@ -191,9 +163,6 @@ class Ids:
     organizer_id = None
     channel_id = None
 
-    def build_game_code(self):
-        self.game_code = self.game_id.encode("utf-8")
-
     def build_team_id(self):
         self.team_id = ids.game_id_to_team_id(self.game_id)
 
@@ -202,6 +171,9 @@ class Ids:
 
     def build_channel_id(self):
         self.channel_id = ids.game_id_to_channel_id(self.game_id)
+
+    def build_game_code(self):
+        self.game_code = self.game_id.encode("utf-8")
 
     def build_slack_object_id(self, object_name):
         return ids.build_slack_object_id(self.secret_prefix,
@@ -221,6 +193,39 @@ class Ids:
 
     def build_vote_button_block_id(self):
         return self.build_slack_object_id('vote_button_block')
+
+
+class Time(Ids):
+
+    game_creation_ts = None
+
+    time_to_guess = None
+    time_to_vote = None
+
+    upper_ts = None
+    lower_ts = None
+
+    guess_start = None
+    vote_start = None
+
+    guess_deadline = None
+    vote_deadline = None
+
+    def build_game_creation_ts(self):
+        self.game_creation_ts = ids.game_id_to_game_creation_ts(self.game_id)
+
+    def compute_guess_deadline(self):
+        self.guess_deadline = \
+            time.compute_deadline(self.guess_start, self.time_to_guess)
+
+    def compute_vote_deadline(self):
+        return time.compute_deadline(self.vote_start, self.time_to_vote)
+
+    def compute_time_left_to_guess(self):
+        return time.compute_time_left(self.guess_deadline)
+
+    def compute_time_left_to_vote(self):
+        return time.compute_time_left(self.vote_deadline)
 
 
 class PubSub(Ids):
@@ -258,6 +263,7 @@ class Firestore(Ids):
 
     team_dict = None
     game_dict = None
+    game_ref = None
 
     def get_team_dict(self):
         self.team_dict = firestore.team_id_to_team_dict(
@@ -268,28 +274,21 @@ class Firestore(Ids):
             self.db, self.team_id, self.game_id)
 
     def get_game_ref(self):
-        return firestore.get_game_ref(self.db, self.team_id, self.game_id)
+        self.game_ref = firestore.get_game_ref(
+            self.db, self.team_id, self.game_id)
 
 
-class Local(Ids, Time):
+class Local(Time):
 
     local_dir_path = None
-    graph_basename = None
     graph_local_path = None
 
-    def build_basename(self, core_name, ext):
-        return '{}_{}_{}.{}'.format(
-                    self.guess_start.strftime('%Y%m%d_%H%M%S'),
-                    core_name, self.game_id, ext)
-
     def build_graph_basename(self):
-        return self.build_basename('graph', 'png')
-
-    def build_local_path(self, basename):
-        return self.local_dir_path + '/' + basename
+        return '{}_{}_{}.{}'.format(
+            self.game_creation_ts, 'graph', self.game_id, 'png')
 
     def build_graph_local_path(self):
-        return self.build_local_path(self.graph_basename)
+        return self.local_dir_path + '/' + self.graph_local_path
 
 
 class Storage(Local):
@@ -363,7 +362,7 @@ class Graph(Local, Results):
         plt.savefig(self.graph_local_path)
 
 
-class Blocks(Ids, Time, Graph):
+class Blocks(Graph):
 
     question = None
 
@@ -431,16 +430,16 @@ class Blocks(Ids, Time, Graph):
         voters_block = self.build_voters_block()
         return blocks.d([vote_timer_block, voters_block])
 
-    def build_anonymous_proposals_block(self):
+    def build_indexed_anonymous_proposals_block(self):
         msg = ['Proposals:']
-        anonymous_proposals = self.build_anonymous_proposals()
+        anonymous_proposals = self.build_indexed_anonymous_proposals()
         for index, proposal in anonymous_proposals:
             msg.append('{}) {}'.format(index, proposal))
         msg = '\n'.join(msg)
         return blocks.build_text_block(msg)
 
     def build_own_guess_block(self, voter):
-        index, guess = self.build_own_guess(voter)
+        index, guess = self.build_own_indexed_guess(voter)
         msg = 'Your guess: {}) {}'.format(index, guess)
         return blocks.build_text_block(msg)
 
@@ -550,7 +549,8 @@ class Views(Blocks):
         votable_proposals_msg = ['Voting options:']
         option_template = input_block_template['element']['options'][0]
         vote_options = []
-        for index, proposal in self.build_votable_proposals(voter):
+        for index, proposal \
+                in self.build_votable_indexed_anonymous_proposals(voter):
             votable_proposals_msg.append('{}) {}'.format(index, proposal))
             vote_option = deepcopy(option_template)
             vote_option['text']['text'] = '{}'.format(index)
@@ -567,7 +567,11 @@ class Views(Blocks):
 
 class Slack(Views):
 
+    slack_token = None
     slack_client = None
+
+    def build_slack_client(self):
+        self.slack_client = SlackClient(token=self.slack_token)
 
     def post_message(self, blocks_):
         return self.slack_client.api_call(
@@ -647,7 +651,6 @@ class Game(Slack, Storage, PubSub, Firestore):
             publisher,
             db,
             bucket,
-            bucket_dir_name,
             local_dir_path,
             logger,
             fetch_game_data
@@ -658,30 +661,40 @@ class Game(Slack, Storage, PubSub, Firestore):
         self.publisher = publisher
         self.db = db
         self.bucket = bucket
-        self.bucket_dir_name = bucket_dir_name
         self.local_dir_path = local_dir_path
         self.logger = logger
+
+        self.build_game_creation_ts()
+
+        self.build_team_id()
+        self.build_channel_id()
+        self.build_organizer_id()
+
+        self.build_game_code()
 
         self.get_team_dict()
         self.diffuse_team_dict()
 
-        self.slack_client = SlackClient(token=self.slack_token)
+        self.build_slack_client()
 
-        if fetch_game_data:
-            self.get_game_dict()
-            self.diffuse_game_dict()
+        self.get_game_ref()
 
-        if self.indexed_signed_proposals is not None:
-            self.indexed_signed_proposals = \
-                self.to_python_indexed_signed_proposals(
-                    self.indexed_signed_proposals)
+        if not fetch_game_data:
+            return
+
+        self.get_game_dict()
+        self.diffuse_game_dict()
 
     def diffuse_dict(self, d):
         for key in d:
-            d[key] = self.__dict__[key]
+            self.__dict__[key] = d[key]
 
     def diffuse_team_dict(self):
         self.diffuse_dict(self.team_dict)
 
     def diffuse_game_dict(self):
         self.diffuse_dict(self.game_dict)
+        if self.firestore_indexed_signed_proposals is not None:
+            self.indexed_signed_proposals = \
+                self.to_python_indexed_signed_proposals(
+                    self.firestore_indexed_signed_proposals)

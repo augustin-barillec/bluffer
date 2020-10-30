@@ -1,5 +1,12 @@
-def build_game_id(team_id, channel_id, organizer_id, trigger_id):
-    return '{}&{}&{}&{}'.format(team_id, channel_id, organizer_id, trigger_id)
+def build_game_id(
+        game_creation_ts,
+        team_id,
+        channel_id,
+        organizer_id,
+        trigger_id):
+
+    return '{}&{}&{}&{}&{}'.format(
+        game_creation_ts, team_id, channel_id, organizer_id, trigger_id)
 
 
 def build_slack_object_id(secret_prefix, object_name, game_id):
@@ -11,8 +18,18 @@ def slack_object_id_to_game_id(slack_object_id):
     return ids[-1]
 
 
-def game_id_to_ids(game_id):
+def split_game_id(game_id):
     return game_id.split('&')
+
+
+def game_id_to_game_creation_ts(game_id):
+    splitted_game_id = split_game_id(game_id)
+    return splitted_game_id[0]
+
+
+def game_id_to_ids(game_id):
+    splitted_game_id = split_game_id(game_id)
+    return splitted_game_id[1:]
 
 
 def game_id_to_team_id(game_id):
