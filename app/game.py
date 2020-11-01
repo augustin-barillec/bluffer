@@ -103,26 +103,15 @@ class Results(Proposals, Voters):
     max_score = None
 
     def compute_truth_score(self, voter):
-        return int(self.frozen_voters[voter] == self.author_to_index('Truth'))
+        return int(self.frozen_voters[voter][1] == self.truth_index)
 
     def compute_bluff_score(self, voter):
         res = 0
         for voter_ in self.frozen_voters:
             voter_index = self.author_to_index(voter)
-            if self.frozen_voters[voter_] == voter_index:
+            if self.frozen_voters[voter_][1] == voter_index:
                 res += 2
         return res
-
-    def compute_winners(self):
-        res = []
-        for r in self.results:
-            if r['score'] == self.max_score:
-                res.append(r['guesser'])
-        self.winners = res
-
-    def compute_max_score(self):
-        scores = [r['score'] for r in self.results if 'score' in r]
-        self.max_score = scores[0]
 
     def build_results(self):
         results = []
@@ -138,7 +127,7 @@ class Results(Proposals, Voters):
                 r['score'] = 0
                 results.append(r)
                 continue
-            vote_index = self.frozen_voters[author]
+            vote_index = self.frozen_voters[author][1]
             r['vote_index'] = vote_index
             r['chosen_author'] = self.index_to_author(vote_index)
             r['truth_score'] = self.compute_truth_score(author)
@@ -151,7 +140,18 @@ class Results(Proposals, Voters):
 
         results.sort(key=lambda r_: sort_key(r_))
 
-        self.results = results
+        return results
+
+    def compute_winners(self):
+        res = []
+        for r in self.results:
+            if r['score'] == self.max_score:
+                res.append(r['guesser'])
+        return res
+
+    def compute_max_score(self):
+        scores = [r['score'] for r in self.results if 'score' in r]
+        return scores[0]
 
 
 class Ids:
@@ -163,17 +163,17 @@ class Ids:
     organizer_id = None
     channel_id = None
 
-    def build_team_id(self):
-        self.team_id = ids.game_id_to_team_id(self.game_id)
+    def get_team_id(self):
+        return ids.game_id_to_team_id(self.game_id)
 
-    def build_organizer_id(self):
-        self.organizer_id = ids.game_id_to_organizer_id(self.game_id)
+    def get_organizer_id(self):
+        return ids.game_id_to_organizer_id(self.game_id)
 
-    def build_channel_id(self):
-        self.channel_id = ids.game_id_to_channel_id(self.game_id)
+    def get_channel_id(self):
+        return ids.game_id_to_channel_id(self.game_id)
 
     def build_game_code(self):
-        self.game_code = self.game_id.encode("utf-8")
+        return self.game_id.encode("utf-8")
 
     def build_slack_object_id(self, object_name):
         return ids.build_slack_object_id(self.secret_prefix,
@@ -211,12 +211,11 @@ class Time(Ids):
     guess_deadline = None
     vote_deadline = None
 
-    def build_game_creation_ts(self):
-        self.game_creation_ts = ids.game_id_to_game_creation_ts(self.game_id)
+    def get_game_creation_ts(self):
+        return ids.game_id_to_game_creation_ts(self.game_id)
 
     def compute_guess_deadline(self):
-        self.guess_deadline = \
-            time.compute_deadline(self.guess_start, self.time_to_guess)
+        return time.compute_deadline(self.guess_start, self.time_to_guess)
 
     def compute_vote_deadline(self):
         return time.compute_deadline(self.vote_start, self.time_to_vote)
@@ -266,16 +265,16 @@ class Firestore(Ids):
     game_ref = None
 
     def get_team_dict(self):
-        self.team_dict = firestore.team_id_to_team_dict(
-            self.db, self.team_id)
+        return firestore.team_id_to_team_dict(self.db, self.team_id)
 
     def get_game_dict(self):
-        self.game_dict = firestore.get_game_dict(
-            self.db, self.team_id, self.game_id)
+        return firestore.get_game_dict(self.db, self.team_id, self.game_id)
 
-    def get_game_ref(self):
-        self.game_ref = firestore.get_game_ref(
-            self.db, self.team_id, self.game_id)
+    def build_game_ref(self):
+        return firestore.get_game_ref(self.db, self.team_id, self.game_id)
+
+    def set_game_dict(self, merge=False):
+        self.game_ref.set(self.game_dict, merge=merge)
 
 
 class Local(Time):
@@ -296,20 +295,15 @@ class Storage(Local):
     bucket = None
     bucket_dir_name = None
 
-    def upload_to_gs(self, local_file_path, sub_dir_name):
+    def upload_to_gs(self, local_file_path):
         basename = os.path.basename(local_file_path)
-
-        blob_name = '{}/{}/{}'.format(
-            self.bucket_dir_name, sub_dir_name, basename)
-
+        blob_name = '{}/{}'.format(self.bucket_dir_name, basename)
         blob = self.bucket.blob(blob_name)
-
         blob.upload_from_filename(local_file_path)
-
         return blob.public_url
 
     def upload_graph_to_gs(self):
-        return self.upload_to_gs(self.graph_local_path, 'graphs')
+        return self.upload_to_gs(self.graph_local_path)
 
 
 class Graph(Local, Results):
@@ -420,10 +414,25 @@ class Blocks(Graph):
     def build_voters_block(self):
         return self.build_users_blocks('voters')
 
+    def build_guess_stage_upper_blocks(self):
+        title_block = self.build_title_block()
+        question_block = self.build_question_block()
+        guess_button_block = self.build_guess_button_block()
+        return blocks.u([title_block, question_block, guess_button_block])
+
     def build_guess_stage_lower_blocks(self):
         guess_timer_block = self.build_guess_timer_block()
         guessers_block = self.build_guessers_block()
         return blocks.d([guess_timer_block, guessers_block])
+
+    def build_vote_stage_upper_blocks(self):
+        title_block = self.build_title_block()
+        question_block = self.build_question_block()
+        anonymous_proposals_block = \
+            self.build_indexed_anonymous_proposals_block()
+        vote_button_block = self.build_vote_button_block()
+        return blocks.u([title_block, question_block,
+                         anonymous_proposals_block, vote_button_block])
 
     def build_vote_stage_lower_blocks(self):
         vote_timer_block = self.build_vote_timer_block()
@@ -443,16 +452,18 @@ class Blocks(Graph):
         msg = 'Your guess: {}) {}'.format(index, guess)
         return blocks.build_text_block(msg)
 
-    def build_signed_guesses_block(self):
-        msg = self.build_signed_guesses_msg('slack')
-        return blocks.build_text_block(msg)
+    def build_indexed_signed_guesses_msg(self):
+        msg = []
+        for r in deepcopy(self.results):
+            player = ids.user_display(r['guesser'])
+            index = r['index']
+            guess = r['guess']
+            r_msg = '• {}: {}) {}'.format(player, index, guess)
+            msg.append(r_msg)
+        msg = '\n'.join(msg)
+        return msg
 
-    def build_conclusion_block(self):
-        msg = self.build_conclusion_msg('slack')
-        return blocks.build_text_block(msg)
-
-    def build_conclusion_msg(self, fmt):
-        assert fmt in ('slack', 'pdf')
+    def build_conclusion_msg(self):
         lg = len(self.guessers)
         lv = len(self.voters)
         if lg == 0:
@@ -461,75 +472,36 @@ class Blocks(Graph):
             g = ids.user_display(self.guessers[0])
             return 'Thanks for your guess, {}!'.format(g)
         if lv == 0:
-            res = 'No one voted'
-            if fmt == 'slack':
-                res += ' :sob:.'
-                return res
-            else:
-                res += ' :/.'
-                return res
+            return 'No one voted :sob:.'
         if lv == 1:
             r = self.results[0]
-            if fmt == 'slack':
-                g = ids.user_display(r['guesser'])
-            else:
-                g = r['guesser_name']
+            g = ids.user_display(r['guesser'])
             ca = r['chosen_author']
             if ca == 'Truth':
-                msg = 'Bravo {}! You found the truth!'.format(g)
-                if fmt == 'slack':
-                    msg += ' :v:'
-                else:
-                    msg += ' :)'
-                return msg
+                return 'Bravo {}! You found the truth! :v:.'.format(g)
             else:
-                msg = 'Hey {}, at least you voted!'.format(g)
-                if fmt == 'slack':
-                    msg += ' :grimacing:'
-                else:
-                    msg += ' :|'
-                return msg
+                return 'Hey {}, at least you voted! :grimacing:'.format(g)
         if self.max_score == 0:
             return 'Zero points scored!'
         lw = len(self.winners)
         if lw == lv:
-            msg = "Well, it's a draw!"
-            if fmt == 'slack':
-                msg += ' :scales:'
-            return msg
+            return "Well, it's a draw! :scales:"
         if lw == 1:
-            if fmt == 'slack':
-                w = ids.user_display(self.winners[0])
-                emoji = ' :first_place_medal:'
-            else:
-                w = self.get_guesser_name(self.winners[0])
-                emoji = ''
-            return 'And the winner is {}!{}'.format(w, emoji)
+            w = ids.user_display(self.winners[0])
+            return 'And the winner is {}!:first_place_medal:'.format(w)
         if lw > 1:
-            if fmt == 'slack':
-                ws = [ids.user_display(w) for w in self.winners]
-                emoji = ' :clap:'
-            else:
-                ws = [self.get_guesser_name(w) for w in self.winners]
-                emoji = ''
+            ws = [ids.user_display(w) for w in self.winners]
             msg_aux = ','.join(ws[:-1])
             msg_aux += ' and {}'.format(ws[-1])
-            return 'And the winners are {}!{}'.format(msg_aux, emoji)
+            return 'And the winners are {}! :clap:'.format(msg_aux)
 
-    def build_signed_guesses_msg(self, fmt):
-        assert fmt in ('slack', 'pdf')
-        msg = []
-        for r in deepcopy(self.results):
-            if fmt == 'slack':
-                player = ids.user_display(r['guesser'])
-            else:
-                player = r['guesser_name']
-            index = r['index']
-            guess = r['guess']
-            r_msg = '• {}: {}) {}'.format(player, index, guess)
-            msg.append(r_msg)
-        msg = '\n'.join(msg)
-        return msg
+    def build_indexed_signed_guesses_block(self):
+        msg = self.build_indexed_signed_guesses_msg()
+        return blocks.build_text_block(msg)
+
+    def build_conclusion_block(self):
+        msg = self.build_conclusion_msg()
+        return blocks.build_text_block(msg)
 
 
 class Views(Blocks):
@@ -571,7 +543,7 @@ class Slack(Views):
     slack_client = None
 
     def build_slack_client(self):
-        self.slack_client = SlackClient(token=self.slack_token)
+        return SlackClient(token=self.slack_token)
 
     def post_message(self, blocks_):
         return self.slack_client.api_call(
@@ -605,13 +577,17 @@ class Slack(Views):
     def update_lower(self, blocks_):
         self.update_message(blocks_, self.lower_ts)
 
+    def update_guess_stage_upper(self):
+        self.update_upper(self.build_guess_stage_upper_blocks())
+
     def update_guess_stage_lower(self):
-        guess_stage_lower_blocks = self.build_guess_stage_lower_blocks()
-        self.update_lower(guess_stage_lower_blocks)
+        self.update_lower(self.build_guess_stage_lower_blocks())
+
+    def update_vote_stage_upper(self):
+        self.update_upper(self.build_vote_stage_upper_blocks())
 
     def update_vote_stage_lower(self):
-        vote_stage_lower_blocks = self.build_vote_stage_lower_blocks()
-        self.update_lower(vote_stage_lower_blocks)
+        self.update_lower(self.build_vote_stage_lower_blocks())
 
     def open_game_setup_view(self, trigger_id):
         self.open_view(trigger_id, self.build_game_setup_view())
@@ -629,11 +605,10 @@ class Slack(Views):
 
     def send_vote_reminders(self):
         time_left_to_vote = self.compute_time_left_to_guess()
-        for u in self.frozen_guessers:
+        for u in self.potential_voters:
             msg_template = (
                 'Hey {}, you can now vote in the bluffer game ' 
-                'organized by {}!'
-            )
+                'organized by {}!')
             msg = msg_template.format(
                 ids.user_display(u),
                 ids.user_display(self.organizer_id),
@@ -664,26 +639,30 @@ class Game(Slack, Storage, PubSub, Firestore):
         self.local_dir_path = local_dir_path
         self.logger = logger
 
-        self.build_game_creation_ts()
+        self.game_code = self.build_game_code()
 
-        self.build_team_id()
-        self.build_channel_id()
-        self.build_organizer_id()
+        self.game_creation_ts = self.get_game_creation_ts()
+        self.team_id = self.get_team_id()
+        self.channel_id = self.get_channel_id()
+        self.organizer_id = self.get_organizer_id()
 
-        self.build_game_code()
+        self.game_ref = self.build_game_ref()
 
-        self.get_team_dict()
+        self.team_dict = self.get_team_dict()
         self.diffuse_team_dict()
 
-        self.build_slack_client()
-
-        self.get_game_ref()
+        self.slack_client = self.build_slack_client()
 
         if not fetch_game_data:
             return
 
-        self.get_game_dict()
+        self.game_dict = self.get_game_dict()
         self.diffuse_game_dict()
+
+        if self.firestore_indexed_signed_proposals is not None:
+            self.indexed_signed_proposals = \
+                self.to_python_indexed_signed_proposals(
+                    self.firestore_indexed_signed_proposals)
 
     def diffuse_dict(self, d):
         for key in d:
@@ -694,7 +673,3 @@ class Game(Slack, Storage, PubSub, Firestore):
 
     def diffuse_game_dict(self):
         self.diffuse_dict(self.game_dict)
-        if self.firestore_indexed_signed_proposals is not None:
-            self.indexed_signed_proposals = \
-                self.to_python_indexed_signed_proposals(
-                    self.firestore_indexed_signed_proposals)

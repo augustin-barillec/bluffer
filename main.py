@@ -73,12 +73,12 @@ def message_actions(request):
         view_callback_id = view['callback_id']
 
         game_id = utils.ids.slack_object_id_to_game_id(view_callback_id)
-        game = build_game(game_id, fetch_game_data=False)
-        debug = game.team_dict['debug']
 
         if view_callback_id.startswith(secret_prefix + '#game_setup_view'):
             question, truth, time_to_guess = utils.views.collect_game_setup(
                 view)
+            game = build_game(game_id, fetch_game_data=False)
+            debug = game.team_dict['debug']
 
             if not debug[0]:
                 time_to_vote = 600
@@ -86,27 +86,26 @@ def message_actions(request):
                 time_to_guess = debug[1]
                 time_to_vote = debug[2]
 
-            game_dict = {
+            game.game_dict = {
                 'question': question,
                 'truth': truth,
                 'time_to_guess': time_to_guess,
                 'time_to_vote': time_to_vote,
             }
 
-            game.game_ref.set(game_dict)
+            game.set_game_dict()
 
             game.trigger_pre_guess_stage()
 
             return make_response('', 200)
 
-        game.get_game_ref()
-        game.get_game_dict()
-        game.diffuse_game_dict()
+        game = build_game(game_id)
+
         if view_callback_id.startswith(secret_prefix + '#guess_view'):
             guess = utils.views.collect_guess(view)
             guess_start = utils.time.get_now()
             game.game_dict['guessers'][user_id] = [guess_start, guess]
-            game.game_ref.set(game.game_dict, merge=True)
+            game.set_game_dict(merge=True)
             game.update_guess_stage_lower()
             return make_response('', 200)
 
@@ -114,7 +113,7 @@ def message_actions(request):
             vote = utils.views.collect_vote(view)
             vote_start = utils.time.get_now()
             game.game_dict['voters'][user_id] = [vote_start, vote]
-            game.game_ref.set(game.game_dict, merge=True)
+            game.set_game_dict(merge=True)
             game.update_vote_stage_lower()
             return make_response('', 200)
 
@@ -160,22 +159,11 @@ def pre_guess_stage(event, context):
     game.game_dict['guessers'] = dict()
     game.game_dict['guess_start'] = guess_start
     game.game_dict['guess_deadline'] = guess_deadline
-    game.game_ref.set(game.game_dict, merge=True)
+    game.set_game_dict(merge=True)
 
     game.diffuse_game_dict()
-
-    question_block = game.build_question_block()
-    guess_button_block = game.build_guess_button_block()
-
-    guess_timer_block = game.build_guess_timer_block()
-    guessers_block = game.build_guessers_block()
-
-    upper_blocks = utils.blocks.u(
-        [title_block, question_block, guess_button_block])
-    lower_blocks = utils.blocks.d([guess_timer_block, guessers_block])
-
-    game.update_upper(upper_blocks)
-    game.update_lower(lower_blocks)
+    game.update_guess_stage_upper()
+    game.update_guess_stage_lower()
 
     game.trigger_guess_stage()
     return make_response('', 200)
@@ -186,22 +174,21 @@ def guess_stage(event, context):
     call_datetime = datetime.now(pytz.UTC)
 
     game_id = utils.pubsub.event_data_to_game_id(event['data'])
-
     game = build_game(game_id, fetch_game_data=False)
 
     while True:
-        game.get_game_dict()
+        game.game_dict = game.get_game_dict()
         game.diffuse_game_dict()
+
+        game.update_guess_stage_lower()
 
         time_left_to_guess = game.compute_time_left_to_guess()
         rpg = game.compute_remaining_potential_guessers()
 
-        game.update_guess_stage_lower()
-
         if time_left_to_guess <= 0 or not rpg:
             game_dict = game.game_dict
             game_dict['frozen_guessers'] = deepcopy(game_dict['guessers'])
-            game.game_ref.set(game_dict, merge=True)
+            game.set_game_dict(merge=True)
             game.trigger_pre_vote_stage()
             return make_response('', 200)
 
@@ -227,6 +214,7 @@ def pre_vote_stage(event, context):
     upper_blocks = utils.blocks.u(
         [title_block, question_block, preparing_vote_stage_block])
     lower_blocks = utils.blocks.d([])
+
     game.update_upper(upper_blocks)
     game.update_lower(lower_blocks)
 
@@ -234,35 +222,22 @@ def pre_vote_stage(event, context):
     vote_deadline = utils.time.compute_deadline(
         vote_start, game.time_to_vote)
 
-    game.game_dict['firestore_index_signed_proposals'] = \
+    game.indexed_signed_proposals = game.build_indexed_signed_proposals()
+
+    game.game_dict['firestore_indexed_signed_proposals'] = \
         game.to_firestore_indexed_signed_proposals(
-            game.build_indexed_signed_proposals())
+            game.indexed_signed_proposals)
     game.game_dict['potential_voters'] = game.frozen_guessers
     game.game_dict['voters'] = dict()
     game.game_dict['vote_start'] = vote_start
     game.game_dict['vote_deadline'] = vote_deadline
-    game.game_ref.set(game.game_dict, merge=True)
+    game.set_game_dict(merge=True)
 
     game.diffuse_game_dict()
-
-    title_block = game.build_title_block()
-    question_block = game.build_question_block()
-    anonymous_proposals_block = \
-        game.build_indexed_anonymous_proposals_block()
-    vote_button_block = game.build_vote_button_block()
-    vote_timer_block = game.build_vote_timer_block()
-    voters_block = game.build_voters_block()
-
-    upper_blocks = utils.blocks.u(
-        [title_block, question_block, anonymous_proposals_block,
-         vote_button_block])
-    lower_blocks = utils.blocks.d([vote_timer_block, voters_block])
-
-    game.update_upper(upper_blocks)
-    game.update_lower(lower_blocks)
+    game.update_vote_stage_upper()
+    game.update_vote_stage_lower()
 
     game.trigger_vote_stage()
-
     return make_response('', 200)
 
 
@@ -274,18 +249,18 @@ def vote_stage(event, context):
     game = build_game(game_id, fetch_game_data=False)
 
     while True:
-        game.get_game_dict()
+        game.game_dict = game.get_game_dict()
         game.diffuse_game_dict()
+
+        game.update_vote_stage_lower()
 
         time_left_to_vote = game.compute_time_left_to_vote()
         rpv = game.compute_remaining_potential_voters()
 
-        game.update_vote_stage_lower()
-
         if time_left_to_vote <= 0 or not rpv:
             game_dict = game.game_dict
             game_dict['frozen_voters'] = deepcopy(game_dict['voters'])
-            game.game_ref.set(game_dict, merge=True)
+            game.set_game_dict(merge=True)
             game.trigger_result_stage()
             return make_response('', 200)
 
@@ -315,15 +290,16 @@ def result_stage(event, context):
     game.update_upper(upper_blocks)
     game.update_lower(lower_blocks)
 
-    game.build_results()
-
-    game.compute_max_score()
-    game.compute_winners()
-    signed_guesses_block = game.build_signed_guesses_block()
+    game.truth_index = game.compute_truth_index()
+    game.results = game.build_results()
+    game.max_score = game.compute_max_score()
+    game.winners = game.compute_winners()
+    indexed_signed_guesses_block = game.build_indexed_signed_guesses_block()
     conclusion_block = game.build_conclusion_block()
 
     upper_blocks = utils.blocks.u(
-        [title_block, question_block, signed_guesses_block, conclusion_block])
+        [title_block, question_block,
+         indexed_signed_guesses_block, conclusion_block])
 
     game.update_upper(upper_blocks)
 
