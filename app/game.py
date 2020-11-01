@@ -252,6 +252,9 @@ class PubSub(Ids):
     def trigger_vote_stage(self):
         self.publish('topic_vote_stage')
 
+    def trigger_pre_result_stage(self):
+        self.publish('topic_pre_result_stage')
+
     def trigger_result_stage(self):
         self.publish('topic_result_stage')
 
@@ -276,21 +279,23 @@ class Firestore(Ids):
     def set_game_dict(self, merge=False):
         self.game_ref.set(self.game_dict, merge=merge)
 
+    def delete(self):
+        firestore.delete_game(self.db, self.team_id, self.game_id)
+
 
 class Local(Time):
 
     local_dir_path = None
     graph_local_path = None
 
-    def build_graph_basename(self):
-        return '{}_{}_{}.{}'.format(
-            self.game_creation_ts, 'graph', self.game_id, 'png')
+    def build_basename(self, kind, ext):
+        return '{}_{}.{}'.format(kind, self.game_id, ext)
 
-    def build_graph_local_path(self):
-        return self.local_dir_path + '/' + self.graph_local_path
+    def build_local_file_path(self, basename):
+        return self.local_dir_path + '/' + basename
 
 
-class Storage(Local):
+class Storage:
 
     bucket = None
     bucket_dir_name = None
@@ -302,14 +307,21 @@ class Storage(Local):
         blob.upload_from_filename(local_file_path)
         return blob.public_url
 
-    def upload_graph_to_gs(self):
-        return self.upload_to_gs(self.graph_local_path)
 
-
-class Graph(Local, Results):
+class Graph(Local, Storage, Results):
 
     graph = None
+    graph_local_path = None
     graph_url = None
+
+    def build_graph_basename(self):
+        return self.build_basename('graph', 'png')
+
+    def build_graph_local_path(self):
+        return self.build_local_file_path(self.build_graph_basename())
+
+    def upload_graph_to_gs(self):
+        return self.upload_to_gs(self.graph_local_path)
 
     def build_graph(self):
         res = nx.DiGraph()
@@ -414,31 +426,6 @@ class Blocks(Graph):
     def build_voters_block(self):
         return self.build_users_blocks('voters')
 
-    def build_guess_stage_upper_blocks(self):
-        title_block = self.build_title_block()
-        question_block = self.build_question_block()
-        guess_button_block = self.build_guess_button_block()
-        return blocks.u([title_block, question_block, guess_button_block])
-
-    def build_guess_stage_lower_blocks(self):
-        guess_timer_block = self.build_guess_timer_block()
-        guessers_block = self.build_guessers_block()
-        return blocks.d([guess_timer_block, guessers_block])
-
-    def build_vote_stage_upper_blocks(self):
-        title_block = self.build_title_block()
-        question_block = self.build_question_block()
-        anonymous_proposals_block = \
-            self.build_indexed_anonymous_proposals_block()
-        vote_button_block = self.build_vote_button_block()
-        return blocks.u([title_block, question_block,
-                         anonymous_proposals_block, vote_button_block])
-
-    def build_vote_stage_lower_blocks(self):
-        vote_timer_block = self.build_vote_timer_block()
-        voters_block = self.build_voters_block()
-        return blocks.d([vote_timer_block, voters_block])
-
     def build_indexed_anonymous_proposals_block(self):
         msg = ['Proposals:']
         anonymous_proposals = self.build_indexed_anonymous_proposals()
@@ -469,7 +456,7 @@ class Blocks(Graph):
         if lg == 0:
             return 'No one played this game :sob:.'
         if lg == 1:
-            g = ids.user_display(self.guessers[0])
+            g = ids.user_display(list(self.guessers)[0])
             return 'Thanks for your guess, {}!'.format(g)
         if lv == 0:
             return 'No one voted :sob:.'
@@ -478,7 +465,7 @@ class Blocks(Graph):
             g = ids.user_display(r['guesser'])
             ca = r['chosen_author']
             if ca == 'Truth':
-                return 'Bravo {}! You found the truth! :v:.'.format(g)
+                return 'Bravo {}! You found the truth! :v:'.format(g)
             else:
                 return 'Hey {}, at least you voted! :grimacing:'.format(g)
         if self.max_score == 0:
@@ -488,20 +475,106 @@ class Blocks(Graph):
             return "Well, it's a draw! :scales:"
         if lw == 1:
             w = ids.user_display(self.winners[0])
-            return 'And the winner is {}!:first_place_medal:'.format(w)
+            return 'And the winner is {}! :first_place_medal:'.format(w)
         if lw > 1:
             ws = [ids.user_display(w) for w in self.winners]
             msg_aux = ','.join(ws[:-1])
             msg_aux += ' and {}'.format(ws[-1])
             return 'And the winners are {}! :clap:'.format(msg_aux)
 
+    def build_truth_block(self):
+        msg = '• Truth: '
+        if len(self.guessers) == 0:
+            msg += '{}'.format(self.truth)
+        else:
+            index = self.truth_index
+            msg += '{}) {}'.format(index, self.truth)
+        return blocks.build_text_block(msg)
+
     def build_indexed_signed_guesses_block(self):
         msg = self.build_indexed_signed_guesses_msg()
         return blocks.build_text_block(msg)
 
+    def build_graph_block(self):
+        return blocks.build_image_block(url=self.graph_url,
+                                        alt_text='Voting graph')
+
     def build_conclusion_block(self):
         msg = self.build_conclusion_msg()
         return blocks.build_text_block(msg)
+
+    def build_pre_guess_stage_upper_blocks(self):
+        title_block = self.build_title_block()
+        preparing_guess_stage_block = self.build_preparing_guess_stage_block()
+        return blocks.u([title_block, preparing_guess_stage_block])
+
+    @staticmethod
+    def build_pre_guess_stage_lower_blocks():
+        return blocks.d([])
+
+    def build_pre_vote_stage_upper_blocks(self):
+        title_block = self.build_title_block()
+        question_block = self.build_question_block()
+        preparing_vote_stage_block = self.build_preparing_vote_stage_block()
+        return blocks.u(
+            [title_block, question_block, preparing_vote_stage_block])
+
+    @staticmethod
+    def build_pre_vote_stage_lower_blocks():
+        return blocks.d([])
+
+    def build_pre_result_stage_upper_blocks(self):
+        title_block = self.build_title_block()
+        question_block = self.build_question_block()
+        computing_results_stage_block = \
+            self.build_computing_results_stage_block()
+        return blocks.u(
+            [title_block, question_block, computing_results_stage_block])
+
+    @staticmethod
+    def build_pre_result_stage_lower_blocks():
+        return blocks.d([])
+
+    def build_guess_stage_upper_blocks(self):
+        title_block = self.build_title_block()
+        question_block = self.build_question_block()
+        guess_button_block = self.build_guess_button_block()
+        return blocks.u([title_block, question_block, guess_button_block])
+
+    def build_guess_stage_lower_blocks(self):
+        guess_timer_block = self.build_guess_timer_block()
+        guessers_block = self.build_guessers_block()
+        return blocks.d([guess_timer_block, guessers_block])
+
+    def build_vote_stage_upper_blocks(self):
+        title_block = self.build_title_block()
+        question_block = self.build_question_block()
+        anonymous_proposals_block = \
+            self.build_indexed_anonymous_proposals_block()
+        vote_button_block = self.build_vote_button_block()
+        return blocks.u([title_block, question_block,
+                         anonymous_proposals_block, vote_button_block])
+
+    def build_vote_stage_lower_blocks(self):
+        vote_timer_block = self.build_vote_timer_block()
+        voters_block = self.build_voters_block()
+        return blocks.d([vote_timer_block, voters_block])
+
+    def build_result_stage_upper_blocks(self):
+        title_block = self.build_title_block()
+        question_block = self.build_question_block()
+        truth_block = self.build_truth_block()
+        indexed_signed_guesses_block = \
+            self.build_indexed_signed_guesses_block()
+        graph_block = self.build_graph_block()
+        conclusion_block = self.build_conclusion_block()
+        return blocks.u([
+            title_block, question_block, truth_block,
+            indexed_signed_guesses_block, graph_block, conclusion_block])
+
+    @staticmethod
+    def build_result_stage_lower_blocks():
+        return blocks.d([])
 
 
 class Views(Blocks):
@@ -577,6 +650,24 @@ class Slack(Views):
     def update_lower(self, blocks_):
         self.update_message(blocks_, self.lower_ts)
 
+    def post_pre_guess_stage_upper(self):
+        return self.post_message(self.build_pre_guess_stage_upper_blocks())
+
+    def post_pre_guess_stage_lower(self):
+        return self.post_message(self.build_pre_guess_stage_lower_blocks())
+
+    def update_pre_vote_stage_upper(self):
+        self.update_upper(self.build_pre_vote_stage_upper_blocks())
+
+    def update_pre_vote_stage_lower(self):
+        self.update_lower(self.build_pre_vote_stage_lower_blocks())
+
+    def update_pre_result_stage_upper(self):
+        self.update_upper(self.build_pre_result_stage_upper_blocks())
+
+    def update_pre_result_stage_lower(self):
+        self.update_lower(self.build_pre_result_stage_lower_blocks())
+
     def update_guess_stage_upper(self):
         self.update_upper(self.build_guess_stage_upper_blocks())
 
@@ -588,6 +679,36 @@ class Slack(Views):
 
     def update_vote_stage_lower(self):
         self.update_lower(self.build_vote_stage_lower_blocks())
+
+    def update_result_stage_upper(self):
+        self.update_upper(self.build_result_stage_upper_blocks())
+
+    def update_result_stage_lower(self):
+        self.update_lower(self.build_result_stage_lower_blocks())
+
+    def post_pre_guess_stage(self):
+        return self.post_pre_guess_stage_upper(), \
+               self.post_pre_guess_stage_lower()
+
+    def update_pre_vote_stage(self):
+        self.update_pre_vote_stage_upper()
+        self.update_pre_vote_stage_lower()
+
+    def update_pre_result_stage(self):
+        self.update_pre_result_stage_upper()
+        self.update_pre_result_stage_lower()
+
+    def update_guess_stage(self):
+        self.update_guess_stage_upper()
+        self.update_guess_stage_lower()
+
+    def update_vote_stage(self):
+        self.update_vote_stage_upper()
+        self.update_vote_stage_lower()
+
+    def update_result_stage(self):
+        self.update_result_stage_upper()
+        self.update_result_stage_lower()
 
     def open_game_setup_view(self, trigger_id):
         self.open_view(trigger_id, self.build_game_setup_view())
@@ -616,7 +737,7 @@ class Slack(Views):
             self.post_ephemeral(u, msg)
 
 
-class Game(Slack, Storage, PubSub, Firestore):
+class Game(Slack, PubSub, Firestore):
 
     def __init__(
             self,
@@ -647,6 +768,8 @@ class Game(Slack, Storage, PubSub, Firestore):
         self.organizer_id = self.get_organizer_id()
 
         self.game_ref = self.build_game_ref()
+
+        self.bucket_dir_name = self.team_id
 
         self.team_dict = self.get_team_dict()
         self.diffuse_team_dict()

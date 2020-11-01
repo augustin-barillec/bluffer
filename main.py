@@ -138,14 +138,7 @@ def pre_guess_stage(event, context):
 
     game = build_game(game_id)
 
-    title_block = game.build_title_block()
-    preparing_guess_stage_block = game.build_preparing_guess_stage_block()
-
-    upper_blocks = utils.blocks.u([title_block, preparing_guess_stage_block])
-    lower_blocks = utils.blocks.d([])
-
-    upper_ts = game.post_message(upper_blocks)
-    lower_ts = game.post_message(lower_blocks)
+    upper_ts, lower_ts = game.post_pre_guess_stage()
 
     potential_guessers = game.get_potential_guessers()
 
@@ -162,8 +155,8 @@ def pre_guess_stage(event, context):
     game.set_game_dict(merge=True)
 
     game.diffuse_game_dict()
-    game.update_guess_stage_upper()
-    game.update_guess_stage_lower()
+
+    game.update_guess_stage()
 
     game.trigger_guess_stage()
     return make_response('', 200)
@@ -206,17 +199,7 @@ def pre_vote_stage(event, context):
 
     game = build_game(game_id)
 
-    title_block = game.build_title_block()
-    question_block = game.build_question_block()
-    preparing_vote_stage_block = \
-        game.build_preparing_vote_stage_block()
-
-    upper_blocks = utils.blocks.u(
-        [title_block, question_block, preparing_vote_stage_block])
-    lower_blocks = utils.blocks.d([])
-
-    game.update_upper(upper_blocks)
-    game.update_lower(lower_blocks)
+    game.update_pre_vote_stage()
 
     vote_start = utils.time.get_now()
     vote_deadline = utils.time.compute_deadline(
@@ -234,8 +217,8 @@ def pre_vote_stage(event, context):
     game.set_game_dict(merge=True)
 
     game.diffuse_game_dict()
-    game.update_vote_stage_upper()
-    game.update_vote_stage_lower()
+
+    game.update_vote_stage()
 
     game.trigger_vote_stage()
     return make_response('', 200)
@@ -261,7 +244,7 @@ def vote_stage(event, context):
             game_dict = game.game_dict
             game_dict['frozen_voters'] = deepcopy(game_dict['voters'])
             game.set_game_dict(merge=True)
-            game.trigger_result_stage()
+            game.trigger_pre_result_stage()
             return make_response('', 200)
 
         if utils.time.datetime1_minus_datetime2(datetime.now(pytz.UTC),
@@ -272,35 +255,40 @@ def vote_stage(event, context):
         time.sleep(5)
 
 
+def pre_result_stage(event, context):
+
+    game_id = utils.pubsub.event_data_to_game_id(event['data'])
+
+    game = build_game(game_id)
+
+    game.update_pre_result_stage()
+
+    game.truth_index = game.compute_truth_index()
+    game.results = game.build_results()
+    game.max_score = game.compute_max_score()
+    game.winners = game.compute_winners()
+    game.graph = game.build_graph()
+    game.draw_graph()
+    game.graph_local_path = game.build_graph_local_path()
+    game.graph_url = game.upload_graph_to_gs()
+
+    game.update_result_stage()
+
+    game.trigger_result_stage()
+
+    return make_response('', 200)
+
+
 def result_stage(event, context):
 
     game_id = utils.pubsub.event_data_to_game_id(event['data'])
 
     game = build_game(game_id)
 
-    title_block = game.build_title_block()
-    question_block = game.build_question_block()
-    computing_results_stage_block = \
-        game.build_computing_results_stage_block()
+    debug = game.team_dict['debug']
 
-    upper_blocks = utils.blocks.u(
-        [title_block, question_block, computing_results_stage_block])
-    lower_blocks = utils.blocks.d([])
-
-    game.update_upper(upper_blocks)
-    game.update_lower(lower_blocks)
-
-    game.truth_index = game.compute_truth_index()
-    game.results = game.build_results()
-    game.max_score = game.compute_max_score()
-    game.winners = game.compute_winners()
-    indexed_signed_guesses_block = game.build_indexed_signed_guesses_block()
-    conclusion_block = game.build_conclusion_block()
-
-    upper_blocks = utils.blocks.u(
-        [title_block, question_block,
-         indexed_signed_guesses_block, conclusion_block])
-
-    game.update_upper(upper_blocks)
+    if not debug[0]:
+        time.sleep(480)
+        game.delete()
 
     return make_response('', 200)

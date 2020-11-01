@@ -11,7 +11,7 @@ gcloud beta emulators pubsub start --project=$PROJECT_ID --host-port=0.0.0.0:$PO
 
 $(gcloud beta emulators pubsub env-init)
 
-for port in {5002..5006}
+for port in {5002..5007}
 do
 function_name=$(port_to_function_name $port)
 topic=topic_$function_name

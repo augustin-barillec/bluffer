@@ -2,9 +2,9 @@
 
 venv
 
-dev/credentials.json
 dev/ngrok
 dev/*.txt
 dev/*.out
 
 conf.yaml
+credentials.json

@@ -9,7 +9,8 @@ in
     5003) echo guess_stage ;;
     5004) echo pre_vote_stage ;;
     5005) echo vote_stage ;;
-    5006) echo result_stage ;;
+    5006) echo pre_result_stage ;;
+    5007) echo result_stage ;;
 esac
 }
 
@@ -23,5 +24,6 @@ in
     5004) echo event ;;
     5005) echo event ;;
     5006) echo event ;;
+    5007) echo event ;;
 esac
 }
