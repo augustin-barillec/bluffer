@@ -138,6 +138,12 @@ def pre_guess_stage(event, context):
 
     game = build_game(game_id)
 
+    if game.pre_guess_stage_already_triggered:
+        return make_response('', 200)
+    else:
+        game.game_dict['pre_guess_stage_already_triggered'] = True
+        game.set_game_dict(merge=True)
+
     upper_ts, lower_ts = game.post_pre_guess_stage()
 
     potential_guessers = game.get_potential_guessers()
@@ -167,11 +173,13 @@ def guess_stage(event, context):
     call_datetime = datetime.now(pytz.UTC)
 
     game_id = utils.pubsub.event_data_to_game_id(event['data'])
-    game = build_game(game_id, fetch_game_data=False)
+    game = build_game(game_id)
+
+    if game.guess_stage_over:
+        return make_response('', 200)
 
     while True:
-        game.game_dict = game.get_game_dict()
-        game.diffuse_game_dict()
+        game = build_game(game_id)
 
         game.update_guess_stage_lower()
 
@@ -181,6 +189,7 @@ def guess_stage(event, context):
         if time_left_to_guess <= 0 or not rpg:
             game_dict = game.game_dict
             game_dict['frozen_guessers'] = deepcopy(game_dict['guessers'])
+            game_dict['guess_stage_over'] = True
             game.set_game_dict(merge=True)
             game.trigger_pre_vote_stage()
             return make_response('', 200)
@@ -198,6 +207,12 @@ def pre_vote_stage(event, context):
     game_id = utils.pubsub.event_data_to_game_id(event['data'])
 
     game = build_game(game_id)
+
+    if game.pre_vote_stage_already_triggered:
+        return make_response('', 200)
+    else:
+        game.game_dict['pre_vote_stage_already_triggered'] = True
+        game.set_game_dict(merge=True)
 
     game.update_pre_vote_stage()
 
@@ -231,11 +246,13 @@ def vote_stage(event, context):
 
     game_id = utils.pubsub.event_data_to_game_id(event['data'])
 
-    game = build_game(game_id, fetch_game_data=False)
+    game = build_game(game_id)
+
+    if game.vote_stage_over:
+        return make_response('', 200)
 
     while True:
-        game.game_dict = game.get_game_dict()
-        game.diffuse_game_dict()
+        game = build_game(game_id)
 
         game.update_vote_stage_lower()
 
@@ -245,6 +262,7 @@ def vote_stage(event, context):
         if time_left_to_vote <= 0 or not rpv:
             game_dict = game.game_dict
             game_dict['frozen_voters'] = deepcopy(game_dict['voters'])
+            game_dict['guess_stage_over'] = True
             game.set_game_dict(merge=True)
             game.trigger_pre_result_stage()
             return make_response('', 200)
@@ -262,6 +280,12 @@ def pre_result_stage(event, context):
     game_id = utils.pubsub.event_data_to_game_id(event['data'])
 
     game = build_game(game_id)
+
+    if game.pre_result_stage_already_triggered:
+        return make_response('', 200)
+    else:
+        game.game_dict['pre_result_stage_already_triggered'] = True
+        game.set_game_dict(merge=True)
 
     game.update_pre_result_stage()
 
@@ -289,9 +313,14 @@ def result_stage(event, context):
 
     game = build_game(game_id)
 
+    if game.result_stage_over:
+        return make_response('', 200)
+
     debug = game.team_dict['debug']
     if not debug[0]:
         time.sleep(480)
         game.delete()
 
+    game.game_dict['result_stage_over'] = True
+    game.set_game_dict(merge=True)
     return make_response('', 200)

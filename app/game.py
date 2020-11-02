@@ -236,6 +236,14 @@ class PubSub(Ids):
     project_id = None
     publisher = None
 
+    pre_guess_stage_already_triggered = False
+    pre_vote_stage_already_triggered = False
+    pre_result_stage_already_triggered = False
+
+    guess_stage_over = False
+    vote_stage_over = False
+    result_stage_over = False
+
     def build_topic_path(self, topic_name):
         return pubsub.build_topic_path(
             self.publisher, self.project_id, topic_name)
