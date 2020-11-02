@@ -220,6 +220,8 @@ def pre_vote_stage(event, context):
 
     game.update_vote_stage()
 
+    game.send_vote_reminders()
+
     game.trigger_vote_stage()
     return make_response('', 200)
 
@@ -268,11 +270,13 @@ def pre_result_stage(event, context):
     game.max_score = game.compute_max_score()
     game.winners = game.compute_winners()
     game.graph = game.build_graph()
-    game.draw_graph()
     game.graph_local_path = game.build_graph_local_path()
+    game.draw_graph()
     game.graph_url = game.upload_graph_to_gs()
 
     game.update_result_stage()
+
+    game.send_game_over_notifications()
 
     game.trigger_result_stage()
 
@@ -286,7 +290,6 @@ def result_stage(event, context):
     game = build_game(game_id)
 
     debug = game.team_dict['debug']
-
     if not debug[0]:
         time.sleep(480)
         game.delete()

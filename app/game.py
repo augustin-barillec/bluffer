@@ -17,7 +17,9 @@ class Guessers:
         return self.potential_guessers[guesser]
 
     def compute_remaining_potential_guessers(self):
-        return set(self.potential_guessers) - set(self.guessers)
+        return {pv: self.potential_guessers[pv]
+                for pv in self.potential_guessers
+                if pv not in self.guessers}
 
 
 class Voters:
@@ -27,7 +29,9 @@ class Voters:
     frozen_voters = None
 
     def compute_remaining_potential_voters(self):
-        return set(self.potential_voters) - set(self.voters)
+        return {pv: self.potential_voters[pv]
+                for pv in self.potential_voters
+                if pv not in self.voters}
 
 
 class Proposals(Guessers):
@@ -379,14 +383,6 @@ class Blocks(Graph):
     def build_question_block(self):
         return blocks.build_text_block(self.question)
 
-    def build_guess_button_block(self):
-        id_ = self.build_guess_button_block_id()
-        return blocks.build_button_block('Your guess', id_)
-
-    def build_vote_button_block(self):
-        id_ = self.build_vote_button_block_id()
-        return blocks.build_button_block('Your vote', id_)
-
     @staticmethod
     def build_preparing_guess_stage_block():
         return blocks.build_text_block('Preparing guess stage...')
@@ -400,6 +396,14 @@ class Blocks(Graph):
         return blocks.build_text_block(
             'Computing results :drum_with_drumsticks:')
 
+    def build_guess_button_block(self):
+        id_ = self.build_guess_button_block_id()
+        return blocks.build_button_block('Your guess', id_)
+
+    def build_vote_button_block(self):
+        id_ = self.build_vote_button_block_id()
+        return blocks.build_button_block('Your vote', id_)
+
     def build_guess_timer_block(self):
         time_left = self.compute_time_left_to_guess()
         return blocks.build_guess_timer_block(time_left)
@@ -408,23 +412,36 @@ class Blocks(Graph):
         time_left = self.compute_time_left_to_vote()
         return blocks.build_vote_timer_block(time_left)
 
-    def build_users_blocks(self, kind):
-        assert kind in ('guessers', 'voters')
-        past_participle = 'guessed' if kind == 'guessers' else 'voted'
-        users = self.guessers if kind == 'guessers' else self.voters
-        users = sorted(users, key=lambda k: users[k][0])
+    @staticmethod
+    def build_users_msg(users, kind, no_users_msg):
         if not users:
-            msg = 'No one has {} yet.'.format(past_participle)
-            return blocks.build_text_block(msg)
+            return no_users_msg
+        users = sorted(users, key=lambda k: users[k][0])
         user_displays = ids.user_displays(users)
-        msg = '{}: {}'.format(kind.title(), user_displays)
+        msg = '{}: {}'.format(kind, user_displays)
+        return msg
+
+    def build_users_blocks(self, users, kind, no_users_msg):
+        msg = self.build_users_msg(users, kind, no_users_msg)
         return blocks.build_text_block(msg)
 
+    def build_remaining_potential_voters_block(self):
+        users = self.compute_remaining_potential_voters()
+        kind = 'Potential voters'
+        no_users_msg = 'Everyone has voted!'
+        return self.build_users_blocks(users, kind, no_users_msg)
+
     def build_guessers_block(self):
-        return self.build_users_blocks('guessers')
+        users = self.guessers
+        kind = 'Guessers'
+        no_users_msg = 'No one has guessed yet.'
+        return self.build_users_blocks(users, kind, no_users_msg)
 
     def build_voters_block(self):
-        return self.build_users_blocks('voters')
+        users = self.voters
+        kind = 'Voters'
+        no_users_msg = 'No one has voted yet.'
+        return self.build_users_blocks(users, kind, no_users_msg)
 
     def build_indexed_anonymous_proposals_block(self):
         msg = ['Proposals:']
@@ -557,8 +574,11 @@ class Blocks(Graph):
 
     def build_vote_stage_lower_blocks(self):
         vote_timer_block = self.build_vote_timer_block()
+        remaining_potential_voters_block = \
+            self.build_remaining_potential_voters_block()
         voters_block = self.build_voters_block()
-        return blocks.d([vote_timer_block, voters_block])
+        return blocks.d(
+            [vote_timer_block, remaining_potential_voters_block, voters_block])
 
     def build_result_stage_upper_blocks(self):
         title_block = self.build_title_block()
@@ -725,7 +745,7 @@ class Slack(Views):
             self.slack_client, self.channel_id, self.organizer_id)
 
     def send_vote_reminders(self):
-        time_left_to_vote = self.compute_time_left_to_guess()
+        time_left_to_vote = self.compute_time_left_to_vote()
         for u in self.potential_voters:
             msg_template = (
                 'Hey {}, you can now vote in the bluffer game ' 
@@ -734,6 +754,12 @@ class Slack(Views):
                 ids.user_display(u),
                 ids.user_display(self.organizer_id),
                 time_left_to_vote)
+            self.post_ephemeral(u, msg)
+
+    def send_game_over_notifications(self):
+        for u in self.guessers:
+            msg = ("The bluffer game organized by {} is over!"
+                   .format(ids.user_display(self.organizer_id)))
             self.post_ephemeral(u, msg)
 
 

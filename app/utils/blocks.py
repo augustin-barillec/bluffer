@@ -41,14 +41,6 @@ def build_image_block(url, alt_text):
     return res
 
 
-def build_guess_button_block(id_):
-    return build_button_block('Your guess', id_)
-
-
-def build_vote_button_block(id_):
-    return build_button_block('Your vote', id_)
-
-
 def build_timer_block(time_left, kind):
     assert kind in ('guess', 'vote')
     time_display = build_time_display(time_left)
