@@ -81,8 +81,14 @@ class Proposals(Ids, Guessers):
     indexed_signed_proposals = None
     truth_index = None
 
+    @staticmethod
+    def sort_users(users):
+        res = sorted(users, key=lambda k: users[k][0])
+        return res
+
     def build_indexed_signed_proposals(self):
-        res = [(k, self.frozen_guessers[k][1]) for k in self.frozen_guessers]
+        sorted_frozen_guessers = self.sort_users(self.frozen_guessers)
+        res = [(k, self.frozen_guessers[k][1]) for k in sorted_frozen_guessers]
         res.append(('Truth', self.truth))
         random.seed(self.game_id)
         random.shuffle(res)
@@ -413,11 +419,10 @@ class Blocks(Graph):
         time_left = self.compute_time_left_to_vote()
         return blocks.build_vote_timer_block(time_left)
 
-    @staticmethod
-    def build_users_msg(users, kind, no_users_msg):
+    def build_users_msg(self, users, kind, no_users_msg):
         if not users:
             return no_users_msg
-        users = sorted(users, key=lambda k: users[k][0])
+        users = self.sort_users(users)
         user_displays = ids.user_displays(users)
         msg = '{}: {}'.format(kind, user_displays)
         return msg
