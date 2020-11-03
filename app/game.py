@@ -34,130 +34,6 @@ class Voters:
                 if pv not in self.voters}
 
 
-class Proposals(Guessers):
-
-    truth = None
-    firestore_indexed_signed_proposals = None
-    indexed_signed_proposals = None
-    truth_index = None
-
-    @staticmethod
-    def to_firestore_indexed_signed_proposals(python_isp):
-        return {str(index): [author, proposal]
-                for index, author, proposal in python_isp}
-
-    @staticmethod
-    def to_python_indexed_signed_proposals(firestore_isp):
-        return [
-            (int(index),
-             firestore_isp[index][0],
-             firestore_isp[index][1])
-            for index in firestore_isp]
-
-    def build_indexed_signed_proposals(self):
-        res = [(k, self.frozen_guessers[k][1]) for k in self.frozen_guessers]
-        res.append(('Truth', self.truth))
-        random.shuffle(res)
-        res = [(index, author, proposal)
-               for index, (author, proposal) in enumerate(res, 1)]
-        return res
-
-    def index_to_author(self, index):
-        for index_, author, proposal in self.indexed_signed_proposals:
-            if index_ == index:
-                return author
-
-    def author_to_index(self, author):
-        for index, author_, proposal in self.indexed_signed_proposals:
-            if author == author_:
-                return index
-
-    def author_to_proposal(self, author):
-        for index_, author_, proposal in self.indexed_signed_proposals:
-            if author_ == author:
-                return proposal
-
-    def build_own_indexed_guess(self, guesser):
-        index = self.author_to_index(guesser)
-        guess = self.author_to_proposal(guesser)
-        return index, guess
-
-    def build_votable_indexed_anonymous_proposals(self, voter):
-        res = []
-        for index, author, proposal in self.indexed_signed_proposals:
-            if author != voter:
-                res.append((index, proposal))
-        return res
-
-    def build_indexed_anonymous_proposals(self):
-        res = []
-        for index, author, proposal in self.indexed_signed_proposals:
-            res.append((index, proposal))
-        return res
-
-    def compute_truth_index(self):
-        return self.author_to_index('Truth')
-
-
-class Results(Proposals, Voters):
-
-    frozen_voters = None
-    results = None
-    winners = None
-    max_score = None
-
-    def compute_truth_score(self, voter):
-        return int(self.frozen_voters[voter][1] == self.truth_index)
-
-    def compute_bluff_score(self, voter):
-        res = 0
-        for voter_ in self.frozen_voters:
-            voter_index = self.author_to_index(voter)
-            if self.frozen_voters[voter_][1] == voter_index:
-                res += 2
-        return res
-
-    def build_results(self):
-        results = []
-        for index, author, proposal in self.indexed_signed_proposals:
-            r = dict()
-            if author == 'Truth':
-                continue
-            r['index'] = index
-            r['guesser'] = author
-            r['guesser_name'] = self.get_guesser_name(author)
-            r['guess'] = proposal
-            if author not in self.frozen_voters:
-                r['score'] = 0
-                results.append(r)
-                continue
-            vote_index = self.frozen_voters[author][1]
-            r['vote_index'] = vote_index
-            r['chosen_author'] = self.index_to_author(vote_index)
-            r['truth_score'] = self.compute_truth_score(author)
-            r['bluff_score'] = self.compute_bluff_score(author)
-            r['score'] = r['truth_score'] + r['bluff_score']
-            results.append(r)
-
-        def sort_key(r_):
-            return 'vote_index' not in r_, -r_['score'], r_['guesser']
-
-        results.sort(key=lambda r_: sort_key(r_))
-
-        return results
-
-    def compute_winners(self):
-        res = []
-        for r in self.results:
-            if r['score'] == self.max_score:
-                res.append(r['guesser'])
-        return res
-
-    def compute_max_score(self):
-        scores = [r['score'] for r in self.results if 'score' in r]
-        return scores[0]
-
-
 class Ids:
 
     secret_prefix = None
@@ -197,6 +73,123 @@ class Ids:
 
     def build_vote_button_block_id(self):
         return self.build_slack_object_id('vote_button_block')
+
+
+class Proposals(Ids, Guessers):
+
+    truth = None
+    indexed_signed_proposals = None
+    truth_index = None
+
+    def build_indexed_signed_proposals(self):
+        res = [(k, self.frozen_guessers[k][1]) for k in self.frozen_guessers]
+        res.append(('Truth', self.truth))
+        random.seed(self.game_id)
+        random.shuffle(res)
+        res = [(index, author, proposal)
+               for index, (author, proposal) in enumerate(res, 1)]
+        res = [{'index': index, 'author': author, 'proposal': proposal}
+               for index, author, proposal in res]
+        return res
+
+    def index_to_author(self, index):
+        for isp in self.indexed_signed_proposals:
+            if isp['index'] == index:
+                return isp['author']
+
+    def author_to_index(self, author):
+        for isp in self.indexed_signed_proposals:
+            if isp['author'] == author:
+                return isp['index']
+
+    def author_to_proposal(self, author):
+        for isp in self.indexed_signed_proposals:
+            if isp['author'] == author:
+                return isp['proposal']
+
+    def build_own_indexed_guess(self, guesser):
+        index = self.author_to_index(guesser)
+        guess = self.author_to_proposal(guesser)
+        return index, guess
+
+    def build_votable_indexed_anonymous_proposals(self, voter):
+        res = []
+        for isp in self.indexed_signed_proposals:
+            if isp['author'] != voter:
+                res.append({'index': isp['index'],
+                            'proposal': isp['proposal']})
+        return res
+
+    def build_indexed_anonymous_proposals(self):
+        res = []
+        for isp in self.indexed_signed_proposals:
+            res.append({'index': isp['index'], 'proposal': isp['proposal']})
+        return res
+
+    def compute_truth_index(self):
+        return self.author_to_index('Truth')
+
+
+class Results(Proposals, Voters):
+
+    frozen_voters = None
+    results = None
+    winners = None
+    max_score = None
+
+    def compute_truth_score(self, voter):
+        return int(self.frozen_voters[voter][1] == self.truth_index)
+
+    def compute_bluff_score(self, voter):
+        res = 0
+        for voter_ in self.frozen_voters:
+            voter_index = self.author_to_index(voter)
+            if self.frozen_voters[voter_][1] == voter_index:
+                res += 2
+        return res
+
+    def build_results(self):
+        results = []
+        for isp in self.indexed_signed_proposals:
+            index = isp['index']
+            author = isp['author']
+            proposal = isp['proposal']
+            r = dict()
+            if author == 'Truth':
+                continue
+            r['index'] = index
+            r['guesser'] = author
+            r['guesser_name'] = self.get_guesser_name(author)
+            r['guess'] = proposal
+            if author not in self.frozen_voters:
+                r['score'] = 0
+                results.append(r)
+                continue
+            vote_index = self.frozen_voters[author][1]
+            r['vote_index'] = vote_index
+            r['chosen_author'] = self.index_to_author(vote_index)
+            r['truth_score'] = self.compute_truth_score(author)
+            r['bluff_score'] = self.compute_bluff_score(author)
+            r['score'] = r['truth_score'] + r['bluff_score']
+            results.append(r)
+
+        def sort_key(r_):
+            return 'vote_index' not in r_, -r_['score'], r_['guesser']
+
+        results.sort(key=lambda r_: sort_key(r_))
+
+        return results
+
+    def compute_winners(self):
+        res = []
+        for r in self.results:
+            if r['score'] == self.max_score:
+                res.append(r['guesser'])
+        return res
+
+    def compute_max_score(self):
+        scores = [r['score'] for r in self.results if 'score' in r]
+        return scores[0]
 
 
 class Time(Ids):
@@ -453,8 +446,10 @@ class Blocks(Graph):
 
     def build_indexed_anonymous_proposals_block(self):
         msg = ['Proposals:']
-        anonymous_proposals = self.build_indexed_anonymous_proposals()
-        for index, proposal in anonymous_proposals:
+        indexed_anonymous_proposals = self.build_indexed_anonymous_proposals()
+        for iap in indexed_anonymous_proposals:
+            index = iap['index']
+            proposal = iap['proposal']
             msg.append('{}) {}'.format(index, proposal))
         msg = '\n'.join(msg)
         return blocks.build_text_block(msg)
@@ -622,8 +617,9 @@ class Views(Blocks):
         votable_proposals_msg = ['Voting options:']
         option_template = input_block_template['element']['options'][0]
         vote_options = []
-        for index, proposal \
-                in self.build_votable_indexed_anonymous_proposals(voter):
+        for iap in self.build_votable_indexed_anonymous_proposals(voter):
+            index = iap['index']
+            proposal = iap['proposal']
             votable_proposals_msg.append('{}) {}'.format(index, proposal))
             vote_option = deepcopy(option_template)
             vote_option['text']['text'] = '{}'.format(index)
@@ -815,11 +811,6 @@ class Game(Slack, PubSub, Firestore):
 
         self.game_dict = self.get_game_dict()
         self.diffuse_game_dict()
-
-        if self.firestore_indexed_signed_proposals is not None:
-            self.indexed_signed_proposals = \
-                self.to_python_indexed_signed_proposals(
-                    self.firestore_indexed_signed_proposals)
 
     def diffuse_dict(self, d):
         for key in d:

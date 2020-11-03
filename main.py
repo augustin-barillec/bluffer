@@ -220,11 +220,8 @@ def pre_vote_stage(event, context):
     vote_deadline = utils.time.compute_deadline(
         vote_start, game.time_to_vote)
 
-    game.indexed_signed_proposals = game.build_indexed_signed_proposals()
-
-    game.game_dict['firestore_indexed_signed_proposals'] = \
-        game.to_firestore_indexed_signed_proposals(
-            game.indexed_signed_proposals)
+    game.game_dict['indexed_signed_proposals'] = \
+        game.build_indexed_signed_proposals()
     game.game_dict['potential_voters'] = game.frozen_guessers
     game.game_dict['voters'] = dict()
     game.game_dict['vote_start'] = vote_start
@@ -262,7 +259,7 @@ def vote_stage(event, context):
         if time_left_to_vote <= 0 or not rpv:
             game_dict = game.game_dict
             game_dict['frozen_voters'] = deepcopy(game_dict['voters'])
-            game_dict['guess_stage_over'] = True
+            game_dict['vote_stage_over'] = True
             game.set_game_dict(merge=True)
             game.trigger_pre_result_stage()
             return make_response('', 200)
