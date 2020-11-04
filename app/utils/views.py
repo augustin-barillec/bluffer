@@ -1,4 +1,6 @@
+import json
 from copy import deepcopy
+from flask import Response
 from app.utils import jsons, blocks
 
 
@@ -6,9 +8,25 @@ def get_view(basename):
     return jsons.get_json('views', basename)
 
 
+exception_view_template = get_view('exception.json')
 game_setup_view_template = get_view('game_setup.json')
 guess_view_template = get_view('guess.json')
 vote_view_template = get_view('vote.json')
+
+
+def build_exception_view(msg):
+    res = deepcopy(exception_view_template)
+    res['blocks'][0]['text']['text'] = msg
+    return res
+
+
+def build_exception_view_response(msg):
+    exception_view = build_exception_view(msg)
+    res = {'response_action': 'update', 'view': exception_view}
+    res = Response(json.dumps(res),
+                   mimetype='application/json',
+                   status=200)
+    return res
 
 
 def build_game_setup_view(id_):

@@ -476,12 +476,12 @@ class Blocks(Graph):
         return msg
 
     def build_conclusion_msg(self):
-        lg = len(self.guessers)
-        lv = len(self.voters)
+        lg = len(self.frozen_guessers)
+        lv = len(self.frozen_voters)
         if lg == 0:
             return 'No one played this game :sob:.'
         if lg == 1:
-            g = ids.user_display(list(self.guessers)[0])
+            g = ids.user_display(list(self.frozen_guessers)[0])
             return 'Thanks for your guess, {}!'.format(g)
         if lv == 0:
             return 'No one voted :sob:.'
@@ -509,7 +509,7 @@ class Blocks(Graph):
 
     def build_truth_block(self):
         msg = '• Truth: '
-        if len(self.guessers) == 0:
+        if len(self.frozen_guessers) == 0:
             msg += '{}'.format(self.truth)
         else:
             index = self.truth_index
@@ -594,11 +594,15 @@ class Blocks(Graph):
         truth_block = self.build_truth_block()
         indexed_signed_guesses_block = \
             self.build_indexed_signed_guesses_block()
-        graph_block = self.build_graph_block()
         conclusion_block = self.build_conclusion_block()
-        return blocks.u([
-            title_block, question_block, truth_block,
-            indexed_signed_guesses_block, graph_block, conclusion_block])
+        res = [title_block, question_block, truth_block,
+               indexed_signed_guesses_block]
+        if len(self.frozen_guessers) > 1 and len(self.frozen_voters) > 0:
+            graph_block = self.build_graph_block()
+            res.append(graph_block)
+        res.append(conclusion_block)
+        res = blocks.u(res)
+        return res
 
     @staticmethod
     def build_result_stage_lower_blocks():
@@ -606,6 +610,10 @@ class Blocks(Graph):
 
 
 class Views(Blocks):
+
+    @staticmethod
+    def build_exception_view(msg):
+        return views.build_exception_view(msg)
 
     def build_game_setup_view(self):
         id_ = self.build_game_setup_view_id()
@@ -647,6 +655,10 @@ class Slack(Views):
     def build_slack_client(self):
         return SlackClient(token=self.slack_token)
 
+    def get_potential_guessers(self):
+        return members.get_potential_guessers(
+            self.slack_client, self.channel_id, self.organizer_id)
+
     def post_message(self, blocks_):
         return self.slack_client.api_call(
             'chat.postMessage',
@@ -678,6 +690,28 @@ class Slack(Views):
 
     def update_lower(self, blocks_):
         self.update_message(blocks_, self.lower_ts)
+
+    def open_exception_view(self, trigger_id, msg):
+        exception_view = self.build_exception_view(msg)
+        self.open_view(trigger_id, exception_view)
+
+    def send_vote_reminders(self):
+        time_left_to_vote = self.compute_time_left_to_vote()
+        for u in self.potential_voters:
+            msg_template = (
+                'Hey {}, you can now vote in the bluffer game ' 
+                'organized by {}!')
+            msg = msg_template.format(
+                ids.user_display(u),
+                ids.user_display(self.organizer_id),
+                time_left_to_vote)
+            self.post_ephemeral(u, msg)
+
+    def send_game_over_notifications(self):
+        for u in self.frozen_guessers:
+            msg = ("The bluffer game organized by {} is over!"
+                   .format(ids.user_display(self.organizer_id)))
+            self.post_ephemeral(u, msg)
 
     def post_pre_guess_stage_upper(self):
         return self.post_message(self.build_pre_guess_stage_upper_blocks())
@@ -748,28 +782,6 @@ class Slack(Views):
     def open_vote_view(self, trigger_id, voter):
         view = self.build_vote_view(voter)
         self.open_view(trigger_id, view)
-
-    def get_potential_guessers(self):
-        return members.get_potential_guessers(
-            self.slack_client, self.channel_id, self.organizer_id)
-
-    def send_vote_reminders(self):
-        time_left_to_vote = self.compute_time_left_to_vote()
-        for u in self.potential_voters:
-            msg_template = (
-                'Hey {}, you can now vote in the bluffer game ' 
-                'organized by {}!')
-            msg = msg_template.format(
-                ids.user_display(u),
-                ids.user_display(self.organizer_id),
-                time_left_to_vote)
-            self.post_ephemeral(u, msg)
-
-    def send_game_over_notifications(self):
-        for u in self.guessers:
-            msg = ("The bluffer game organized by {} is over!"
-                   .format(ids.user_display(self.organizer_id)))
-            self.post_ephemeral(u, msg)
 
 
 class Game(Slack, PubSub, Firestore):

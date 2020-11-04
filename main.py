@@ -80,17 +80,19 @@ def message_actions(request):
             game = build_game(game_id, fetch_game_data=False)
             debug = game.team_dict['debug']
 
-            if not debug[0]:
+            if not debug['activated']:
                 time_to_vote = 600
             else:
-                time_to_guess = debug[1]
-                time_to_vote = debug[2]
+                time_to_guess = debug['time_to_guess']
+                time_to_vote = debug['time_to_vote']
 
             game.game_dict = {
                 'question': question,
                 'truth': truth,
                 'time_to_guess': time_to_guess,
                 'time_to_vote': time_to_vote,
+                'channel_id': game.channel_id,
+                'organizer_id': game.organizer_id
             }
 
             game.set_game_dict()
@@ -294,6 +296,11 @@ def pre_result_stage(event, context):
     game.graph_local_path = game.build_graph_local_path()
     game.draw_graph()
     game.graph_url = game.upload_graph_to_gs()
+
+    game.game_dict['results'] = game.results
+    game.game_dict['max_score'] = game.max_score
+    game.game_dict['winners'] = game.winners
+    game.set_game_dict(merge=True)
 
     game.update_result_stage()
 
