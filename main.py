@@ -57,6 +57,21 @@ def slack_command(request):
         game_creation_ts, team_id, channel_id, organizer_id, trigger_id)
     game = build_game(game_id, fetch_game_data=False)
 
+    max_games = game.team_dict['max_games']
+    if len(game.team_dict['games']) >= max_games:
+        msg = ('There are already {} games running! '
+               'This is the maximal number allowed.'.format(max_games))
+        game.open_exception_view(trigger_id, msg)
+        return make_response('', 200)
+
+    organizer_ids = [utils.ids.game_id_to_organizer_id(game_id)
+                     for game_id in game.team_dict]
+    if organizer_id in organizer_ids:
+        msg = ('You are the organizer of a game which is sill running. '
+               'You can only have one game running at a time.')
+        game.open_exception_view(trigger_id, msg)
+        return make_response('', 200)
+
     game.open_game_setup_view(trigger_id)
 
     return make_response('', 200)
@@ -90,9 +105,7 @@ def message_actions(request):
                 'question': question,
                 'truth': truth,
                 'time_to_guess': time_to_guess,
-                'time_to_vote': time_to_vote,
-                'channel_id': game.channel_id,
-                'organizer_id': game.organizer_id
+                'time_to_vote': time_to_vote
             }
 
             game.set_game_dict()

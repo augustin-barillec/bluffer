@@ -1,3 +1,4 @@
 -r requirements.txt
 functions-framework==1.2.0
+jupyter==1.0.0
 
