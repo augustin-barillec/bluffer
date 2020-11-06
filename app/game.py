@@ -200,7 +200,7 @@ class Results(Proposals, Voters):
 
 class Time(Ids):
 
-    game_creation_ts = None
+    slash_command_compact = None
 
     time_to_guess = None
     time_to_vote = None
@@ -214,8 +214,8 @@ class Time(Ids):
     guess_deadline = None
     vote_deadline = None
 
-    def get_game_creation_ts(self):
-        return ids.game_id_to_game_creation_ts(self.game_id)
+    def get_slash_command_compact(self):
+        return ids.game_id_to_slash_command_compact(self.game_id)
 
     def compute_guess_deadline(self):
         return time.compute_deadline(self.guess_start, self.time_to_guess)
@@ -279,7 +279,7 @@ class Firestore(Ids):
     game_ref = None
 
     def get_team_dict(self):
-        return firestore.team_id_to_team_dict(self.db, self.team_id)
+        return firestore.get_team_dict(self.db, self.team_id)
 
     def get_game_dict(self):
         return firestore.get_game_dict(self.db, self.team_id, self.game_id)
@@ -656,44 +656,29 @@ class Slack(Views):
         return SlackClient(token=self.slack_token)
 
     def get_potential_guessers(self):
-        return members.get_potential_guessers(
+        return slack.get_potential_guessers(
             self.slack_client, self.channel_id, self.organizer_id)
 
     def post_message(self, blocks_):
-        return self.slack_client.api_call(
-            'chat.postMessage',
-            channel=self.channel_id,
-            blocks=blocks_)['ts']
+        return slack.post_message(self.slack_client, self.channel_id, blocks_)
 
     def post_ephemeral(self, user_id, msg):
-        self.slack_client.api_call(
-            'chat.postEphemeral',
-            channel=self.channel_id,
-            user=user_id,
-            text=msg)
+        slack.post_ephemeral(self.slack_client, self.channel_id, user_id, msg)
 
     def update_message(self, blocks_, ts):
-        self.slack_client.api_call(
-            'chat.update',
-            channel=self.channel_id,
-            ts=ts,
-            blocks=blocks_)
+        slack.update_message(self.slack_client, self.channel_id, blocks_, ts)
 
     def open_view(self, trigger_id, view):
-        self.slack_client.api_call(
-            'views.open',
-            trigger_id=trigger_id,
-            view=view)
+        slack.open_view(self.slack_client, trigger_id, view)
+
+    def open_exception_view(self, trigger_id, msg):
+        slack.open_exception_view(self.slack_client, trigger_id, msg)
 
     def update_upper(self, blocks_):
         self.update_message(blocks_, self.upper_ts)
 
     def update_lower(self, blocks_):
         self.update_message(blocks_, self.lower_ts)
-
-    def open_exception_view(self, trigger_id, msg):
-        exception_view = self.build_exception_view(msg)
-        self.open_view(trigger_id, exception_view)
 
     def send_vote_reminders(self):
         time_left_to_vote = self.compute_time_left_to_vote()
@@ -809,7 +794,7 @@ class Game(Slack, PubSub, Firestore):
 
         self.game_code = self.build_game_code()
 
-        self.game_creation_ts = self.get_game_creation_ts()
+        self.slash_command_compact = self.get_slash_command_compact()
         self.team_id = self.get_team_id()
         self.channel_id = self.get_channel_id()
         self.organizer_id = self.get_organizer_id()

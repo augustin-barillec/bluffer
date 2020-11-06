@@ -6,8 +6,15 @@ def get_now():
     return datetime.now(pytz.UTC)
 
 
-def build_compact_format(datetime_):
-    return datetime_.strftime('%Y%m%d_%H%M%S')
+compact_format = '%Y%m%d_%H%M%S'
+
+
+def datetime_to_compact(datetime_):
+    return datetime_.strftime(compact_format)
+
+
+def compact_to_datetime(compact):
+    return datetime.strptime(compact, compact_format)
 
 
 def compute_deadline(start_datetime, time_left):

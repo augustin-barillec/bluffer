@@ -1,4 +1,4 @@
 -r requirements.txt
 functions-framework==1.2.0
-jupyter==1.0.0
+jupyterlab==2.2.9
 

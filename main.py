@@ -45,16 +45,17 @@ def build_game(game_id, fetch_game_data=True):
         fetch_game_data=fetch_game_data)
 
 
-def slack_command(request):
+def slash_command(request):
     team_id = request.form['team_id']
     channel_id = request.form['channel_id']
     organizer_id = request.form['user_id']
     trigger_id = request.form['trigger_id']
 
-    game_creation_ts = utils.time.build_compact_format(utils.time.get_now())
+    slash_command_compact = utils.time.datetime_to_compact(
+        utils.time.get_now())
 
     game_id = utils.ids.build_game_id(
-        game_creation_ts, team_id, channel_id, organizer_id, trigger_id)
+        slash_command_compact, team_id, channel_id, organizer_id, trigger_id)
     game = build_game(game_id, fetch_game_data=False)
 
     max_games = game.team_dict['max_games']
@@ -341,3 +342,20 @@ def result_stage(event, context):
     game.game_dict['result_stage_over'] = True
     game.set_game_dict(merge=True)
     return make_response('', 200)
+
+
+def erase(event, context):
+    teams_ref = utils.firestore.get_teams_ref(db)
+    for team in teams_ref.stream():
+        games_ref = utils.firestore.get_games_ref(db, team.id)
+        for g in games_ref.stream():
+            game = build_game(g.id)
+            result_stage_over = game.result_stage_over
+            guess_start = game.guess_start
+            now = utils.time.get_now()
+            delta = utils.time.datetime1_minus_datetime2(
+                now, guess_start)
+            delta_max = game.time_to_guess + game.time_to_vote + 180
+            if result_stage_over or delta >= delta_max:
+                game.delete()
+    time.sleep(5)

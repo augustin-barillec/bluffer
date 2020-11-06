@@ -6,5 +6,4 @@ google-chrome https://console.cloud.google.com/firestore/data/teams?project=proj
 
 google-chrome https://app.slack.com/client/TLEN0RAUD/CTXC9LC8P &
 firefox https://app.slack.com/client/TLEN0RAUD/CTXC9LC8P &
-firefox -private-window https://app.slack.com/client/TLEN0RAUD/CTXC9LC8P &
 microsoft-edge https://app.slack.com/client/TLEN0RAUD/CTXC9LC8P &

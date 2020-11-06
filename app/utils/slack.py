@@ -1,3 +1,6 @@
+from app.utils import views
+
+
 def get_channel_members(slack_client, channel_id):
     return slack_client.api_call(
         'conversations.members',
@@ -40,3 +43,38 @@ def get_potential_guessers(slack_client, channel_id, organizer_id):
         if c1 and c2 and c3 and c4 and c5:
             res[m['id']] = user_info_to_user_name(m)
     return res
+
+
+def post_message(slack_client, channel_id, blocks):
+    return slack_client.api_call(
+        'chat.postMessage',
+        channel=channel_id,
+        blocks=blocks)['ts']
+
+
+def post_ephemeral(slack_client, channel_id, user_id, msg):
+    slack_client.api_call(
+        'chat.postEphemeral',
+        channel=channel_id,
+        user=user_id,
+        text=msg)
+
+
+def update_message(slack_client, channel_id, blocks, ts):
+    slack_client.api_call(
+        'chat.update',
+        channel=channel_id,
+        ts=ts,
+        blocks=blocks)
+
+
+def open_view(slack_client, trigger_id, view):
+    slack_client.api_call(
+        'views.open',
+        trigger_id=trigger_id,
+        view=view)
+
+
+def open_exception_view(slack_client, trigger_id, msg):
+    exception_view = views.build_exception_view(msg)
+    open_view(slack_client, trigger_id, exception_view)

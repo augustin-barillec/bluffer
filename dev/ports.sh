@@ -3,7 +3,7 @@
 function port_to_function_name(){
 case $1
 in
-    5000) echo slack_command ;;
+    5000) echo slash_command ;;
     5001) echo message_actions ;;
     5002) echo pre_guess_stage ;;
     5003) echo guess_stage ;;

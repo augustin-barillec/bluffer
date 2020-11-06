@@ -1,2 +1,2 @@
 from app.utils import \
-    blocks, firestore, ids, members, pubsub, time, views
+    blocks, firestore, ids, slack, pubsub, time, views
