@@ -78,3 +78,9 @@ def open_view(slack_client, trigger_id, view):
 def open_exception_view(slack_client, trigger_id, msg):
     exception_view = views.build_exception_view(msg)
     open_view(slack_client, trigger_id, exception_view)
+
+
+def get_app_conversations(slack_client):
+    return slack_client.api_call(
+        'users.conversations',
+        types='public_channel, private_channel, mpim, im')['channels']

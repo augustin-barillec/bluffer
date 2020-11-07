@@ -58,18 +58,27 @@ def slash_command(request):
         slash_command_compact, team_id, channel_id, organizer_id, trigger_id)
     game = build_game(game_id, fetch_game_data=False)
 
-    max_games = game.team_dict['max_games']
-    if len(game.team_dict['games']) >= max_games:
+    game_dicts = utils.firestore.get_game_dicts(db, team_id)
+
+    max_running_games = game.team_dict['max_running_games']
+    nb_of_running_games = utils.firestore.count_running_games(game_dicts)
+    if nb_of_running_games >= max_running_games:
         msg = ('There are already {} games running! '
-               'This is the maximal number allowed.'.format(max_games))
+               'This is the maximal number allowed.'.format(max_running_games))
         game.open_exception_view(trigger_id, msg)
         return make_response('', 200)
 
-    organizer_ids = [utils.ids.game_id_to_organizer_id(game_id)
-                     for game_id in game.team_dict]
-    if organizer_id in organizer_ids:
+    running_organizer_ids = utils.firestore.get_running_organizer_ids(
+        game_dicts)
+    if organizer_id in running_organizer_ids:
         msg = ('You are the organizer of a game which is sill running. '
                'You can only have one game running at a time.')
+        game.open_exception_view(trigger_id, msg)
+        return make_response('', 200)
+
+    app_conversations = utils.slack.get_app_conversations(game.slack_client)
+    if channel_id not in [c['id'] for c in app_conversations]:
+        msg = 'Please invite me first to this conversation!'
         game.open_exception_view(trigger_id, msg)
         return make_response('', 200)
 
@@ -84,9 +93,15 @@ def message_actions(request):
     user_id = message_action['user']['id']
     trigger_id = message_action['trigger_id']
 
+    if message_action_type not in ('block_actions', 'view_submission'):
+        return make_response('', 200)
+
     if message_action_type == 'view_submission':
         view = message_action['view']
         view_callback_id = view['callback_id']
+
+        if not view_callback_id.startswith(secret_prefix):
+            return make_response('', 200)
 
         game_id = utils.ids.slack_object_id_to_game_id(view_callback_id)
 
@@ -108,6 +123,19 @@ def message_actions(request):
                 'time_to_guess': time_to_guess,
                 'time_to_vote': time_to_vote
             }
+
+            if len(GAMES) >= 3:
+                msg = ('Question: {}\n\n'
+                       'Answer: {}\n\n'
+                       'Time to guess: {}s\n\n'
+                       'There are already 3 games running! '
+                       'This is the maximal number allowed.'.format(
+                        question, truth, time_to_guess))
+                exception_view_response = views.build_exception_view_response(
+                    msg)
+                return Response(json.dumps(exception_view_response),
+                                mimetype='application/json',
+                                status=200)
 
             game.set_game_dict()
 
@@ -149,6 +177,7 @@ def message_actions(request):
 
 
 def pre_guess_stage(event, context):
+    assert context == context
 
     game_id = utils.pubsub.event_data_to_game_id(event['data'])
 
@@ -185,6 +214,7 @@ def pre_guess_stage(event, context):
 
 
 def guess_stage(event, context):
+    assert context == context
 
     call_datetime = datetime.now(pytz.UTC)
 
@@ -219,6 +249,7 @@ def guess_stage(event, context):
 
 
 def pre_vote_stage(event, context):
+    assert context == context
 
     game_id = utils.pubsub.event_data_to_game_id(event['data'])
 
@@ -255,6 +286,8 @@ def pre_vote_stage(event, context):
 
 
 def vote_stage(event, context):
+    assert context == context
+
     call_datetime = datetime.now(pytz.UTC)
 
     game_id = utils.pubsub.event_data_to_game_id(event['data'])
@@ -289,6 +322,7 @@ def vote_stage(event, context):
 
 
 def pre_result_stage(event, context):
+    assert context == context
 
     game_id = utils.pubsub.event_data_to_game_id(event['data'])
 
@@ -326,6 +360,7 @@ def pre_result_stage(event, context):
 
 
 def result_stage(event, context):
+    assert context == context
 
     game_id = utils.pubsub.event_data_to_game_id(event['data'])
 
@@ -335,27 +370,10 @@ def result_stage(event, context):
         return make_response('', 200)
 
     debug = game.team_dict['debug']
-    if not debug[0]:
+    if not debug['activated']:
         time.sleep(480)
         game.delete()
 
     game.game_dict['result_stage_over'] = True
     game.set_game_dict(merge=True)
     return make_response('', 200)
-
-
-def erase(event, context):
-    teams_ref = utils.firestore.get_teams_ref(db)
-    for team in teams_ref.stream():
-        games_ref = utils.firestore.get_games_ref(db, team.id)
-        for g in games_ref.stream():
-            game = build_game(g.id)
-            result_stage_over = game.result_stage_over
-            guess_start = game.guess_start
-            now = utils.time.get_now()
-            delta = utils.time.datetime1_minus_datetime2(
-                now, guess_start)
-            delta_max = game.time_to_guess + game.time_to_vote + 180
-            if result_stage_over or delta >= delta_max:
-                game.delete()
-    time.sleep(5)
