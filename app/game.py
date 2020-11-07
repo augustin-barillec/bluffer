@@ -7,6 +7,17 @@ from slackclient import SlackClient
 from app.utils import *
 
 
+class Question:
+
+    question = None
+
+
+class Truth:
+
+    truth = None
+    truth_index = None
+
+
 class Guessers:
 
     potential_guessers = None
@@ -75,11 +86,9 @@ class Ids:
         return self.build_slack_object_id('vote_button_block')
 
 
-class Proposals(Ids, Guessers):
+class Proposals(Ids, Truth, Guessers):
 
-    truth = None
     indexed_signed_proposals = None
-    truth_index = None
 
     @staticmethod
     def sort_users(users):
@@ -294,7 +303,7 @@ class Firestore(Ids):
         firestore.delete_game(self.db, self.team_id, self.game_id)
 
 
-class Local(Time):
+class Local(Ids):
 
     local_dir_path = None
     graph_local_path = None
@@ -379,9 +388,7 @@ class Graph(Local, Storage, Results):
         plt.savefig(self.graph_local_path)
 
 
-class Blocks(Graph):
-
-    question = None
+class Blocks(Question, Time, Graph):
 
     def build_title_block(self):
         msg = 'Game set up by {}!'.format(ids.user_display(self.organizer_id))
@@ -769,7 +776,83 @@ class Slack(Views):
         self.open_view(trigger_id, view)
 
 
-class Game(Slack, PubSub, Firestore):
+class Exceptions(Question, Truth, Guessers, Time):
+
+    max_running_games = None
+    max_guessers = None
+    game_exists = None
+
+    @staticmethod
+    def count_running_games(game_dicts):
+        return len([g for g in game_dicts if 'result_stage_over' not in g])
+
+    @staticmethod
+    def get_running_organizer_ids(game_dicts):
+        return [ids.game_id_to_organizer_id(gid) for gid in game_dicts
+                if 'result_stage_over' not in game_dicts[gid]]
+
+    def are_too_many_running_games(self, game_dicts):
+        nb_of_running_games = self.count_running_games(game_dicts)
+        return nb_of_running_games >= self.max_running_games
+
+    def is_running_organizer_id(self, game_dicts):
+        running_organizer_ids = self.get_running_organizer_ids(game_dicts)
+        return self.organizer_id in running_organizer_ids
+
+    def is_app_in_conversation(self, app_conversations):
+        return self.channel_id in [c['id'] for c in app_conversations]
+
+    def is_time_left_to_guess(self):
+        return self.compute_time_left_to_guess() >= 0
+
+    def are_too_many_guessers(self):
+        assert len(self.guessers) >= self.max_guessers
+
+    def is_time_left_to_vote(self):
+        return self.compute_time_left_to_vote() >= 0
+
+    def is_game_dead(self):
+        return not self.game_exists
+
+    def build_exception_msg(self, number, **kwargs):
+        if number == 0:
+            msg_template = ('There are already {} games running! '
+                            'This is the maximal number allowed.')
+            msg = msg_template.format(self.max_running_games)
+        elif number == 1:
+            msg = ('You are the organizer of a game which is sill running. '
+                   'You can only have one game running at a time.')
+        elif number == 2:
+            msg = 'Please invite me first to this conversation!'
+        elif number == 3:
+            msg = ('Question: {}\n\n'
+                   'Answer: {}\n\n'
+                   'Time to guess: {}s\n\n'
+                   'There are already 3 games running! '
+                   'This is the maximal number allowed.'.format(
+                    self.question, self.truth, self.time_to_guess))
+        elif number == 4:
+            msg = ('Your guess: {}\n\n'
+                   'It will not be taken into account '
+                   'because the guessing deadline '
+                   'has passed!'.format(kwargs['guess']))
+        elif number == 5:
+            guess = kwargs['guess']
+            msg = ('Your guess: {}\n\n'
+                   'It will not be taken into account '
+                   'because there are already 80 guessers. '
+                   'This is the maximal number allowed.'.format(guess))
+        elif number == 6:
+            vote = kwargs['vote']
+            msg = ('Your vote: proposal {}.\n\n'
+                   'It will not be taken into account '
+                   'because the voting deadline has passed!'.format(vote))
+        elif number == 7:
+            msg = 'This game is dead!'
+        return msg
+
+
+class Game(PubSub, Firestore, Slack, Exceptions):
 
     def __init__(
             self,
@@ -812,7 +895,11 @@ class Game(Slack, PubSub, Firestore):
             return
 
         self.game_dict = self.get_game_dict()
-        self.diffuse_game_dict()
+        if self.game_dict:
+            self.game_exists = True
+            self.diffuse_game_dict()
+        else:
+            self.game_exists = False
 
     def diffuse_dict(self, d):
         for key in d:

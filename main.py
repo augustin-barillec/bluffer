@@ -60,25 +60,19 @@ def slash_command(request):
 
     game_dicts = utils.firestore.get_game_dicts(db, team_id)
 
-    max_running_games = game.team_dict['max_running_games']
-    nb_of_running_games = utils.firestore.count_running_games(game_dicts)
-    if nb_of_running_games >= max_running_games:
-        msg = ('There are already {} games running! '
-               'This is the maximal number allowed.'.format(max_running_games))
+    if game.are_too_many_running_games(game_dicts):
+        msg = game.build_exception_msg(0)
         game.open_exception_view(trigger_id, msg)
         return make_response('', 200)
 
-    running_organizer_ids = utils.firestore.get_running_organizer_ids(
-        game_dicts)
-    if organizer_id in running_organizer_ids:
-        msg = ('You are the organizer of a game which is sill running. '
-               'You can only have one game running at a time.')
+    if game.is_running_organizer_id(game_dicts):
+        msg = game.build_exception_msg(1)
         game.open_exception_view(trigger_id, msg)
         return make_response('', 200)
 
     app_conversations = utils.slack.get_app_conversations(game.slack_client)
-    if channel_id not in [c['id'] for c in app_conversations]:
-        msg = 'Please invite me first to this conversation!'
+    if not game.is_app_in_conversation(app_conversations):
+        msg = game.build_exception_msg(2)
         game.open_exception_view(trigger_id, msg)
         return make_response('', 200)
 
@@ -91,7 +85,6 @@ def message_actions(request):
     message_action = json.loads(request.form['payload'])
     message_action_type = message_action['type']
     user_id = message_action['user']['id']
-    trigger_id = message_action['trigger_id']
 
     if message_action_type not in ('block_actions', 'view_submission'):
         return make_response('', 200)
@@ -109,33 +102,24 @@ def message_actions(request):
             question, truth, time_to_guess = utils.views.collect_game_setup(
                 view)
             game = build_game(game_id, fetch_game_data=False)
-            debug = game.team_dict['debug']
-
-            if not debug['activated']:
-                time_to_vote = 600
-            else:
-                time_to_guess = debug['time_to_guess']
-                time_to_vote = debug['time_to_vote']
 
             game.game_dict = {
                 'question': question,
                 'truth': truth,
                 'time_to_guess': time_to_guess,
-                'time_to_vote': time_to_vote
             }
 
-            if len(GAMES) >= 3:
-                msg = ('Question: {}\n\n'
-                       'Answer: {}\n\n'
-                       'Time to guess: {}s\n\n'
-                       'There are already 3 games running! '
-                       'This is the maximal number allowed.'.format(
-                        question, truth, time_to_guess))
-                exception_view_response = views.build_exception_view_response(
-                    msg)
-                return Response(json.dumps(exception_view_response),
-                                mimetype='application/json',
-                                status=200)
+            game.diffuse_game_dict()
+
+            game_dicts = utils.firestore.get_game_dicts(db, game.team_id)
+
+            if game.are_too_many_running_games(game_dicts):
+                msg = game.build_exception_msg(3)
+                return utils.views.build_exception_view_response(msg)
+
+            if game.is_running_organizer_id(game_dicts):
+                msg = game.build_exception_msg(1)
+                return utils.views.build_exception_view_response(msg)
 
             game.set_game_dict()
 
@@ -145,8 +129,18 @@ def message_actions(request):
 
         game = build_game(game_id)
 
+        if game.is_game_dead():
+            msg = game.build_exception_msg(7)
+            return utils.views.build_exception_view_response(msg)
+
         if view_callback_id.startswith(secret_prefix + '#guess_view'):
             guess = utils.views.collect_guess(view)
+            if not game.is_time_left_to_guess():
+                msg = game.build_exception_msg(4, guess=guess)
+                return utils.views.build_exception_view_response(msg)
+            if game.are_too_many_guessers():
+                msg = game.build_exception_msg(5)
+                return utils.views.build_exception_view_response(msg)
             guess_start = utils.time.get_now()
             game.game_dict['guessers'][user_id] = [guess_start, guess]
             game.set_game_dict(merge=True)
@@ -155,6 +149,9 @@ def message_actions(request):
 
         if view_callback_id.startswith(secret_prefix + '#vote_view'):
             vote = utils.views.collect_vote(view)
+            if not game.is_time_left_to_vote():
+                msg = game.build_exception_msg(6, vote=vote)
+                return utils.views.build_exception_view_response(msg)
             vote_start = utils.time.get_now()
             game.game_dict['voters'][user_id] = [vote_start, vote]
             game.set_game_dict(merge=True)
@@ -162,16 +159,53 @@ def message_actions(request):
             return make_response('', 200)
 
     if message_action_type == 'block_actions':
-
+        trigger_id = message_action['trigger_id']
         action_block_id = message_action['actions'][0]['block_id']
+
+        if not action_block_id.startswith(secret_prefix):
+            return make_response('', 200)
+
         game_id = utils.ids.slack_object_id_to_game_id(action_block_id)
         game = build_game(game_id)
 
+        if game.is_game_dead():
+            msg = game.build_exception_msg(7)
+            game.open_exception_view(trigger_id, msg)
+            return make_response('', 200)
+
         if action_block_id.startswith(secret_prefix + '#guess_button_block'):
+            if user_id == game.organizer_id:
+                msg = game.build_exception_msg(7)
+                game.open_exception_view(trigger_id, msg)
+                return make_response('', 200)
+            if user_id in game.guessers:
+                msg = game.build_exception_msg(7)
+                game.open_exception_view(trigger_id, msg)
+                return make_response('', 200)
+            if user_id not in game.potential_guessers:
+                msg = game.build_exception_msg(7)
+                game.open_exception_view(trigger_id, msg)
+                return make_response('', 200)
+            if len(game.guessers) >= 80:
+                msg = game.build_exception_msg(7)
+                game.open_exception_view(trigger_id, msg)
+                return make_response('', 200)
+            if user_id == 'Truth':
+                msg = game.build_exception_msg(7)
+                game.open_exception_view(trigger_id, msg)
+                return make_response('', 200)
             game.open_guess_view(trigger_id)
             return make_response('', 200)
 
         if action_block_id.startswith(secret_prefix + '#vote_button_block'):
+            if user_id not in game.potential_voters:
+                msg = game.build_exception_msg(7)
+                game.open_exception_view(trigger_id, msg)
+                return make_response('', 200)
+            if user_id in game.voters:
+                msg = game.build_exception_msg(7)
+                game.open_exception_view(trigger_id, msg)
+                return make_response('', 200)
             game.open_vote_view(trigger_id, user_id)
             return make_response('', 200)
 
