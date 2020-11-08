@@ -2,11 +2,15 @@
 
 source ports.sh
 
+PROJECT_ID=$(head -n 1 ../conf.yaml)
+PROJECT_ID=${PROJECT_ID#"project_id: "}
+
 ./clean_functions.sh
 
 $(gcloud beta emulators pubsub env-init)
 
-export GOOGLE_APPLICATION_CREDENTIALS=../credentials.json
+export credentials_basename=default_compute_service_account.json
+export GOOGLE_APPLICATION_CREDENTIALS=/etc/$PROJECT_ID/$credentials_basename
 
 SOURCE=../main.py
 

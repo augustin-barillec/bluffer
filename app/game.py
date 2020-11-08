@@ -147,7 +147,6 @@ class Proposals(Ids, Truth, Guessers):
 
 class Results(Proposals, Voters):
 
-    frozen_voters = None
     results = None
     winners = None
     max_score = None
@@ -292,6 +291,9 @@ class Firestore(Ids):
 
     def get_game_dict(self):
         return firestore.get_game_dict(self.db, self.team_id, self.game_id)
+
+    def get_game_dicts(self):
+        return firestore.get_game_dicts(self.db, self.team_id)
 
     def build_game_ref(self):
         return firestore.get_game_ref(self.db, self.team_id, self.game_id)
@@ -622,6 +624,10 @@ class Views(Blocks):
     def build_exception_view(msg):
         return views.build_exception_view(msg)
 
+    @staticmethod
+    def build_exception_view_response(msg):
+        return views.build_exception_view_response(msg)
+
     def build_game_setup_view(self):
         id_ = self.build_game_setup_view_id()
         return views.build_game_setup_view(id_)
@@ -665,6 +671,9 @@ class Slack(Views):
     def get_potential_guessers(self):
         return slack.get_potential_guessers(
             self.slack_client, self.channel_id, self.organizer_id)
+
+    def get_app_conversations(self):
+        return slack.get_app_conversations(self.slack_client)
 
     def post_message(self, blocks_):
         return slack.post_message(self.slack_client, self.channel_id, blocks_)
@@ -776,7 +785,7 @@ class Slack(Views):
         self.open_view(trigger_id, view)
 
 
-class Exceptions(Question, Truth, Guessers, Time):
+class Exceptions(Question, Time, Truth, Guessers, Voters):
 
     max_running_games = None
     max_guessers = None
@@ -795,7 +804,7 @@ class Exceptions(Question, Truth, Guessers, Time):
         nb_of_running_games = self.count_running_games(game_dicts)
         return nb_of_running_games >= self.max_running_games
 
-    def is_running_organizer_id(self, game_dicts):
+    def is_organizer_id_running(self, game_dicts):
         running_organizer_ids = self.get_running_organizer_ids(game_dicts)
         return self.organizer_id in running_organizer_ids
 
@@ -806,50 +815,85 @@ class Exceptions(Question, Truth, Guessers, Time):
         return self.compute_time_left_to_guess() >= 0
 
     def are_too_many_guessers(self):
-        assert len(self.guessers) >= self.max_guessers
+        return len(self.guessers) >= self.max_guessers
 
     def is_time_left_to_vote(self):
         return self.compute_time_left_to_vote() >= 0
 
-    def is_game_dead(self):
-        return not self.game_exists
+    @staticmethod
+    def build_running_organizer_id_exception_msg():
+        return ('You are the organizer of a game which is sill running. '
+                'You can only have one game running at a time.')
 
-    def build_exception_msg(self, number, **kwargs):
-        if number == 0:
+    def build_slash_command_exception_msg(self, game_dicts, app_conversations):
+        if self.are_too_many_running_games(game_dicts):
             msg_template = ('There are already {} games running! '
                             'This is the maximal number allowed.')
             msg = msg_template.format(self.max_running_games)
-        elif number == 1:
-            msg = ('You are the organizer of a game which is sill running. '
-                   'You can only have one game running at a time.')
-        elif number == 2:
-            msg = 'Please invite me first to this conversation!'
-        elif number == 3:
+            return msg
+        if self.is_organizer_id_running(game_dicts):
+            return self.build_running_organizer_id_exception_msg()
+        if not self.is_app_in_conversation(app_conversations):
+            return 'Please invite me first to this conversation!'
+
+    def build_game_setup_view_exception_msg(self, game_dicts):
+        if self.are_too_many_running_games(game_dicts):
             msg = ('Question: {}\n\n'
                    'Answer: {}\n\n'
                    'Time to guess: {}s\n\n'
                    'There are already 3 games running! '
                    'This is the maximal number allowed.'.format(
                     self.question, self.truth, self.time_to_guess))
-        elif number == 4:
+            return msg
+        if self.is_organizer_id_running(game_dicts):
+            return self.build_running_organizer_id_exception_msg()
+
+    def build_guess_view_exception_msg(self, guess):
+        if not self.is_time_left_to_guess():
             msg = ('Your guess: {}\n\n'
                    'It will not be taken into account '
                    'because the guessing deadline '
-                   'has passed!'.format(kwargs['guess']))
-        elif number == 5:
-            guess = kwargs['guess']
-            msg = ('Your guess: {}\n\n'
-                   'It will not be taken into account '
-                   'because there are already 80 guessers. '
-                   'This is the maximal number allowed.'.format(guess))
-        elif number == 6:
-            vote = kwargs['vote']
+                   'has passed!'.format(guess))
+            return msg
+        if self.are_too_many_guessers():
+            msg_template = ('Your guess: {}\n\n'
+                            'It will not be taken into account '
+                            'because there are already {} guessers. '
+                            'This is the maximal number allowed.')
+            msg = msg_template.format(guess, self.max_guessers)
+            return msg
+
+    def build_vote_view_exception_msg(self, vote):
+        if not self.is_time_left_to_vote():
             msg = ('Your vote: proposal {}.\n\n'
                    'It will not be taken into account '
                    'because the voting deadline has passed!'.format(vote))
-        elif number == 7:
-            msg = 'This game is dead!'
-        return msg
+            return msg
+
+    def build_guess_button_exception_msg(self, user_id):
+        if user_id == self.organizer_id:
+            return 'As the organizer of this game, you cannot guess!'
+        if user_id in self.guessers:
+            return 'You have already guessed!'
+        if user_id not in self.potential_guessers:
+            msg = ('You cannot guess because when the set up of this '
+                   'game started, you were not a member of this channel.')
+            return msg
+        if self.are_too_many_guessers():
+            msg_template = ('You cannot guess because there are already {} '
+                            'guessers. This is the maximal number allowed.')
+            msg = msg_template.format(self.max_guessers)
+            return msg
+        if user_id == 'Truth':
+            msg = ("You cannot play bluffer because your slack user_id is "
+                   "'Truth', which is a reserved word for the game.")
+            return msg
+
+    def build_vote_button_exception_msg(self, user_id):
+        if user_id not in self.potential_voters:
+            return 'Only guessers can vote!'
+        if user_id in self.voters:
+            return 'You have already voted!'
 
 
 class Game(PubSub, Firestore, Slack, Exceptions):
@@ -864,7 +908,6 @@ class Game(PubSub, Firestore, Slack, Exceptions):
             bucket,
             local_dir_path,
             logger,
-            fetch_game_data
     ):
         self.game_id = game_id
         self.secret_prefix = secret_prefix
@@ -890,9 +933,6 @@ class Game(PubSub, Firestore, Slack, Exceptions):
         self.diffuse_team_dict()
 
         self.slack_client = self.build_slack_client()
-
-        if not fetch_game_data:
-            return
 
         self.game_dict = self.get_game_dict()
         if self.game_dict:
