@@ -4,7 +4,13 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from copy import deepcopy
 from slackclient import SlackClient
-from app.utils import *
+from app.utils import blocks, firestore, ids, slack, pubsub, time, views
+
+
+class Version:
+
+    version_actual = 1
+    version_db = None
 
 
 class Question:
@@ -209,6 +215,9 @@ class Results(Proposals, Voters):
 class Time(Ids):
 
     slash_command_compact = None
+
+    game_setup_submission = None
+    max_life_span = None
 
     time_to_guess = None
     time_to_vote = None
@@ -785,7 +794,7 @@ class Slack(Views):
         self.open_view(trigger_id, view)
 
 
-class Exceptions(Question, Time, Truth, Guessers, Voters):
+class Exceptions(Version, Question, Time, Truth, Guessers, Voters):
 
     max_running_games = None
     max_guessers = None
@@ -800,44 +809,69 @@ class Exceptions(Question, Time, Truth, Guessers, Voters):
         return [ids.game_id_to_organizer_id(gid) for gid in game_dicts
                 if 'result_stage_over' not in game_dicts[gid]]
 
-    def are_too_many_running_games(self, game_dicts):
+    def max_nb_of_running_games_reached(self, game_dicts):
         nb_of_running_games = self.count_running_games(game_dicts)
         return nb_of_running_games >= self.max_running_games
 
-    def is_organizer_id_running(self, game_dicts):
+    def organizer_has_another_game_running(self, game_dicts):
         running_organizer_ids = self.get_running_organizer_ids(game_dicts)
         return self.organizer_id in running_organizer_ids
 
-    def is_app_in_conversation(self, app_conversations):
+    def app_is_in_conversation(self, app_conversations):
         return self.channel_id in [c['id'] for c in app_conversations]
 
-    def is_time_left_to_guess(self):
+    def no_time_left_to_guess(self):
         return self.compute_time_left_to_guess() >= 0
 
-    def are_too_many_guessers(self):
+    def max_nb_of_guessers_reached(self):
         return len(self.guessers) >= self.max_guessers
 
-    def is_time_left_to_vote(self):
+    def no_time_left_to_vote(self):
         return self.compute_time_left_to_vote() >= 0
 
+    def game_is_too_old(self):
+        now = time.get_now()
+        delta = time.datetime1_minus_datetime2(now, self.game_setup_submission)
+        return delta >= self.max_life_span
+
+    def version_is_bad(self):
+        return self.version_actual != self.version_db
+
+    def game_is_dead(self):
+        if not self.game_exists:
+            return True
+        if self.game_setup_submission is None:
+            return True
+        if self.game_is_too_old():
+            return True
+        if self.version_db is None:
+            return True
+        if self.version_is_bad():
+            return True
+        return False
+
     @staticmethod
-    def build_running_organizer_id_exception_msg():
+    def build_organizer_has_another_game_running_msg():
         return ('You are the organizer of a game which is sill running. '
                 'You can only have one game running at a time.')
 
+    def build_game_is_dead_msg(self):
+        if self.game_is_dead():
+            return 'This game is dead!'
+
     def build_slash_command_exception_msg(self, game_dicts, app_conversations):
-        if self.are_too_many_running_games(game_dicts):
+        if self.max_nb_of_running_games_reached(game_dicts):
             msg_template = ('There are already {} games running! '
                             'This is the maximal number allowed.')
             msg = msg_template.format(self.max_running_games)
             return msg
-        if self.is_organizer_id_running(game_dicts):
-            return self.build_running_organizer_id_exception_msg()
-        if not self.is_app_in_conversation(app_conversations):
+        if self.organizer_has_another_game_running(game_dicts):
+            return self.build_organizer_has_another_game_running_msg()
+        if not self.app_is_in_conversation(app_conversations):
             return 'Please invite me first to this conversation!'
 
     def build_game_setup_view_exception_msg(self, game_dicts):
-        if self.are_too_many_running_games(game_dicts):
+        if self.max_nb_of_running_games_reached(game_dicts):
             msg = ('Question: {}\n\n'
                    'Answer: {}\n\n'
                    'Time to guess: {}s\n\n'
@@ -845,17 +879,17 @@ class Exceptions(Question, Time, Truth, Guessers, Voters):
                    'This is the maximal number allowed.'.format(
                     self.question, self.truth, self.time_to_guess))
             return msg
-        if self.is_organizer_id_running(game_dicts):
-            return self.build_running_organizer_id_exception_msg()
+        if self.organizer_has_another_game_running(game_dicts):
+            return self.build_organizer_has_another_game_running_msg()
 
     def build_guess_view_exception_msg(self, guess):
-        if not self.is_time_left_to_guess():
+        if not self.no_time_left_to_guess():
             msg = ('Your guess: {}\n\n'
                    'It will not be taken into account '
                    'because the guessing deadline '
                    'has passed!'.format(guess))
             return msg
-        if self.are_too_many_guessers():
+        if self.max_nb_of_guessers_reached():
             msg_template = ('Your guess: {}\n\n'
                             'It will not be taken into account '
                             'because there are already {} guessers. '
@@ -864,7 +898,7 @@ class Exceptions(Question, Time, Truth, Guessers, Voters):
             return msg
 
     def build_vote_view_exception_msg(self, vote):
-        if not self.is_time_left_to_vote():
+        if not self.no_time_left_to_vote():
             msg = ('Your vote: proposal {}.\n\n'
                    'It will not be taken into account '
                    'because the voting deadline has passed!'.format(vote))
@@ -879,7 +913,7 @@ class Exceptions(Question, Time, Truth, Guessers, Voters):
             msg = ('You cannot guess because when the set up of this '
                    'game started, you were not a member of this channel.')
             return msg
-        if self.are_too_many_guessers():
+        if self.max_nb_of_guessers_reached():
             msg_template = ('You cannot guess because there are already {} '
                             'guessers. This is the maximal number allowed.')
             msg = msg_template.format(self.max_guessers)

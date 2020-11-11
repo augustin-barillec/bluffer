@@ -34,6 +34,3 @@ def get_game_dicts(db, team_id):
 
 def delete_game(db, team_id, game_id):
     get_game_ref(db, team_id, game_id).delete()
-
-
-

@@ -4,14 +4,14 @@ import pytz
 import json
 import yaml
 import logging
-
+import google.cloud.pubsub_v1
+import google.cloud.firestore
+import google.cloud.storage
 from copy import deepcopy
 from datetime import datetime
 from flask import make_response
-from google.cloud import pubsub_v1, firestore, storage
-
 from app.game import Game
-from app import utils
+from app.utils import firestore, ids, pubsub, time, views
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
                     level='INFO')
@@ -20,15 +20,13 @@ logger = logging.getLogger()
 dir_path = os.path.realpath(os.path.dirname(__file__))
 with open(os.path.join(dir_path, 'conf.yaml')) as f:
     conf = yaml.safe_load(f)
-
 secret_prefix = conf['secret_prefix']
 project_id = conf['project_id']
 bucket_name = conf['bucket_name']
 local_dir_path = conf['local_dir_path']
-
-publisher = pubsub_v1.PublisherClient()
-db = firestore.Client(project=project_id)
-storage_client = storage.Client(project=project_id)
+publisher = google.cloud.pubsub_v1.PublisherClient()
+db = google.cloud.firestore.Client(project=project_id)
+storage_client = google.cloud.storage.Client(project=project_id)
 bucket = storage_client.bucket(bucket_name)
 
 
@@ -50,9 +48,9 @@ def slash_command(request):
     organizer_id = request.form['user_id']
     trigger_id = request.form['trigger_id']
 
-    slash_command_compact = utils.time.datetime_to_compact(
-        utils.time.get_now())
-    game_id = utils.ids.build_game_id(
+    slash_command_compact = time.datetime_to_compact(
+        time.get_now())
+    game_id = ids.build_game_id(
         slash_command_compact, team_id, channel_id, organizer_id, trigger_id)
     game = build_game(game_id)
 
@@ -81,13 +79,15 @@ def message_actions(request):
         view_callback_id = view['callback_id']
         if not view_callback_id.startswith(secret_prefix):
             return make_response('', 200)
-        game_id = utils.ids.slack_object_id_to_game_id(view_callback_id)
+        game_id = ids.slack_object_id_to_game_id(view_callback_id)
         game = build_game(game_id)
 
         if view_callback_id.startswith(secret_prefix + '#game_setup_view'):
-            question, truth, time_to_guess = utils.views.collect_game_setup(
+            question, truth, time_to_guess = views.collect_game_setup(
                 view)
+            game_setup_submission = time.get_now()
             game.game_dict = {
+                'game_setup_submission': game_setup_submission,
                 'question': question,
                 'truth': truth,
                 'time_to_guess': time_to_guess,
@@ -102,23 +102,27 @@ def message_actions(request):
             game.trigger_pre_guess_stage()
             return make_response('', 200)
 
+        exception_msg = game.build_game_is_dead_msg()
+        if exception_msg:
+            return game.build_exception_view_response(exception_msg)
+
         if view_callback_id.startswith(secret_prefix + '#guess_view'):
-            guess = utils.views.collect_guess(view)
+            guess = views.collect_guess(view)
             exception_msg = game.build_guess_view_exception_msg(guess)
             if exception_msg:
                 return game.build_exception_view_response(exception_msg)
-            guess_start = utils.time.get_now()
+            guess_start = time.get_now()
             game.game_dict['guessers'][user_id] = [guess_start, guess]
             game.set_game_dict(merge=True)
             game.update_guess_stage_lower()
             return make_response('', 200)
 
         if view_callback_id.startswith(secret_prefix + '#vote_view'):
-            vote = utils.views.collect_vote(view)
+            vote = views.collect_vote(view)
             exception_msg = game.build_vote_view_exception_msg(vote)
             if exception_msg:
                 return game.build_exception_view_response(exception_msg)
-            vote_start = utils.time.get_now()
+            vote_start = time.get_now()
             game.game_dict['voters'][user_id] = [vote_start, vote]
             game.set_game_dict(merge=True)
             game.update_vote_stage_lower()
@@ -129,7 +133,7 @@ def message_actions(request):
         action_block_id = message_action['actions'][0]['block_id']
         if not action_block_id.startswith(secret_prefix):
             return make_response('', 200)
-        game_id = utils.ids.slack_object_id_to_game_id(action_block_id)
+        game_id = ids.slack_object_id_to_game_id(action_block_id)
         game = build_game(game_id)
 
         if action_block_id.startswith(secret_prefix + '#guess_button_block'):
@@ -151,25 +155,22 @@ def message_actions(request):
 
 def pre_guess_stage(event, context):
     assert context == context
-
-    game_id = utils.pubsub.event_data_to_game_id(event['data'])
-
+    game_id = pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
 
+    if game.game_is_dead():
+        return make_response('', 200)
     if game.pre_guess_stage_already_triggered:
         return make_response('', 200)
     else:
         game.game_dict['pre_guess_stage_already_triggered'] = True
         game.set_game_dict(merge=True)
 
-    upper_ts, lower_ts = game.post_pre_guess_stage()
-
+    game.upper_ts, game.lower_ts = game.post_pre_guess_stage()
     potential_guessers = game.get_potential_guessers()
-
-    guess_start = utils.time.get_now()
-    guess_deadline = utils.time.compute_deadline(
+    guess_start = time.get_now()
+    guess_deadline = time.compute_deadline(
         guess_start, game.time_to_guess)
-
     game.game_dict['upper_ts'] = upper_ts
     game.game_dict['lower_ts'] = lower_ts
     game.game_dict['potential_guessers'] = potential_guessers
@@ -177,34 +178,29 @@ def pre_guess_stage(event, context):
     game.game_dict['guess_start'] = guess_start
     game.game_dict['guess_deadline'] = guess_deadline
     game.set_game_dict(merge=True)
-
     game.diffuse_game_dict()
 
     game.update_guess_stage()
-
     game.trigger_guess_stage()
     return make_response('', 200)
 
 
 def guess_stage(event, context):
     assert context == context
-
     call_datetime = datetime.now(pytz.UTC)
-
-    game_id = utils.pubsub.event_data_to_game_id(event['data'])
+    game_id = pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
 
+    if game.game_is_dead():
+        return make_response('', 200)
     if game.guess_stage_over:
         return make_response('', 200)
 
     while True:
         game = build_game(game_id)
-
         game.update_guess_stage_lower()
-
         time_left_to_guess = game.compute_time_left_to_guess()
         rpg = game.compute_remaining_potential_guessers()
-
         if time_left_to_guess <= 0 or not rpg:
             game_dict = game.game_dict
             game_dict['frozen_guessers'] = deepcopy(game_dict['guessers'])
@@ -212,22 +208,20 @@ def guess_stage(event, context):
             game.set_game_dict(merge=True)
             game.trigger_pre_vote_stage()
             return make_response('', 200)
-
-        if utils.time.datetime1_minus_datetime2(
-                utils.time.get_now(), call_datetime) > 60:
+        if time.datetime1_minus_datetime2(
+                time.get_now(), call_datetime) > 60:
             game.trigger_guess_stage()
             return make_response('', 200)
-
         time.sleep(5)
 
 
 def pre_vote_stage(event, context):
     assert context == context
-
-    game_id = utils.pubsub.event_data_to_game_id(event['data'])
-
+    game_id = pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
 
+    if game.game_is_dead():
+        return make_response('', 200)
     if game.pre_vote_stage_already_triggered:
         return make_response('', 200)
     else:
@@ -236,10 +230,9 @@ def pre_vote_stage(event, context):
 
     game.update_pre_vote_stage()
 
-    vote_start = utils.time.get_now()
-    vote_deadline = utils.time.compute_deadline(
+    vote_start = time.get_now()
+    vote_deadline = time.compute_deadline(
         vote_start, game.time_to_vote)
-
     game.game_dict['indexed_signed_proposals'] = \
         game.build_indexed_signed_proposals()
     game.game_dict['potential_voters'] = game.frozen_guessers
@@ -247,37 +240,30 @@ def pre_vote_stage(event, context):
     game.game_dict['vote_start'] = vote_start
     game.game_dict['vote_deadline'] = vote_deadline
     game.set_game_dict(merge=True)
-
     game.diffuse_game_dict()
 
     game.update_vote_stage()
-
     game.send_vote_reminders()
-
     game.trigger_vote_stage()
     return make_response('', 200)
 
 
 def vote_stage(event, context):
     assert context == context
-
     call_datetime = datetime.now(pytz.UTC)
-
-    game_id = utils.pubsub.event_data_to_game_id(event['data'])
-
+    game_id = pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
 
+    if game.game_is_dead():
+        return make_response('', 200)
     if game.vote_stage_over:
         return make_response('', 200)
 
     while True:
         game = build_game(game_id)
-
         game.update_vote_stage_lower()
-
         time_left_to_vote = game.compute_time_left_to_vote()
         rpv = game.compute_remaining_potential_voters()
-
         if time_left_to_vote <= 0 or not rpv:
             game_dict = game.game_dict
             game_dict['frozen_voters'] = deepcopy(game_dict['voters'])
@@ -285,22 +271,21 @@ def vote_stage(event, context):
             game.set_game_dict(merge=True)
             game.trigger_pre_result_stage()
             return make_response('', 200)
-
-        if utils.time.datetime1_minus_datetime2(datetime.now(pytz.UTC),
-                                                call_datetime) > 60:
+        if time.datetime1_minus_datetime2(
+                datetime.now(pytz.UTC),
+                call_datetime) > 60:
             game.trigger_vote_stage()
             return make_response('', 200)
-
         time.sleep(5)
 
 
 def pre_result_stage(event, context):
     assert context == context
-
-    game_id = utils.pubsub.event_data_to_game_id(event['data'])
-
+    game_id = pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
 
+    if game.game_is_dead():
+        return make_response('', 200)
     if game.pre_result_stage_already_triggered:
         return make_response('', 200)
     else:
@@ -317,7 +302,6 @@ def pre_result_stage(event, context):
     game.graph_local_path = game.build_graph_local_path()
     game.draw_graph()
     game.graph_url = game.upload_graph_to_gs()
-
     game.game_dict['results'] = game.results
     game.game_dict['max_score'] = game.max_score
     game.game_dict['winners'] = game.winners
@@ -335,17 +319,15 @@ def pre_result_stage(event, context):
 def result_stage(event, context):
     assert context == context
 
-    game_id = utils.pubsub.event_data_to_game_id(event['data'])
+    game_id = pubsub.event_data_to_game_id(event['data'])
 
     game = build_game(game_id)
 
-    if game.result_stage_over:
+    if game.game_is_dead():
         return make_response('', 200)
 
-    # post_clean = game.team_dict['post_clean']
-    # if post_clean:
-    #     time.sleep(480)
-    #     game.delete()
+    if game.result_stage_over:
+        return make_response('', 200)
 
     game.game_dict['result_stage_over'] = True
     game.set_game_dict(merge=True)
@@ -353,9 +335,11 @@ def result_stage(event, context):
 
 
 def erase(event, context):
-    while True:
-        for team in teams:
-            for game in team['games']:
-                if game.is_over or game.too_old or game.deprecated:
-                    game.delete()
-        time.sleep(5)
+    assert event == event and context == context
+    teams_ref = firestore.get_teams_ref(db)
+    for t in teams_ref.stream():
+        games_ref = firestore.get_games_ref(db, t.id)
+        for g in games_ref.stream():
+            game = build_game(g.id)
+            if game.game_is_dead():
+                game.delete()

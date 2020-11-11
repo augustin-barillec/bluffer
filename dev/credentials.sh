@@ -1,0 +1,4 @@
+source project_id.sh
+
+credentials_basename=default_compute_service_account.json
+GOOGLE_APPLICATION_CREDENTIALS=/etc/$PROJECT_ID/$credentials_basename
