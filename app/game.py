@@ -9,8 +9,8 @@ from app.utils import blocks, firestore, ids, slack, pubsub, time, views
 
 class Version:
 
-    version_actual = 1
-    version_db = None
+    version_latest = 1
+    version = None
 
 
 class Question:
@@ -54,29 +54,29 @@ class Voters:
 class Ids:
 
     secret_prefix = None
-    game_id = None
-    game_code = None
+    id = None
+    code = None
     team_id = None
     organizer_id = None
     channel_id = None
 
     def get_team_id(self):
-        return ids.game_id_to_team_id(self.game_id)
+        return ids.game_id_to_team_id(self.id)
 
     def get_organizer_id(self):
-        return ids.game_id_to_organizer_id(self.game_id)
+        return ids.game_id_to_organizer_id(self.id)
 
     def get_channel_id(self):
-        return ids.game_id_to_channel_id(self.game_id)
+        return ids.game_id_to_channel_id(self.id)
 
-    def build_game_code(self):
-        return self.game_id.encode("utf-8")
+    def build_code(self):
+        return self.id.encode("utf-8")
 
     def build_slack_object_id(self, object_name):
         return ids.build_slack_object_id(self.secret_prefix,
-                                         object_name, self.game_id)
+                                         object_name, self.id)
 
-    def build_game_setup_view_id(self):
+    def build_setup_view_id(self):
         return self.build_slack_object_id('game_setup_view')
 
     def build_guess_view_id(self):
@@ -105,7 +105,7 @@ class Proposals(Ids, Truth, Guessers):
         sorted_frozen_guessers = self.sort_users(self.frozen_guessers)
         res = [(k, self.frozen_guessers[k][1]) for k in sorted_frozen_guessers]
         res.append(('Truth', self.truth))
-        random.seed(self.game_id)
+        random.seed(self.id)
         random.shuffle(res)
         res = [(index, author, proposal)
                for index, (author, proposal) in enumerate(res, 1)]
@@ -216,7 +216,7 @@ class Time(Ids):
 
     slash_command_compact = None
 
-    game_setup_submission = None
+    setup_submission = None
     max_life_span = None
 
     time_to_guess = None
@@ -232,7 +232,7 @@ class Time(Ids):
     vote_deadline = None
 
     def get_slash_command_compact(self):
-        return ids.game_id_to_slash_command_compact(self.game_id)
+        return ids.game_id_to_slash_command_compact(self.id)
 
     def compute_guess_deadline(self):
         return time.compute_deadline(self.guess_start, self.time_to_guess)
@@ -266,7 +266,7 @@ class PubSub(Ids):
 
     def publish(self, topic_name):
         topic_path = self.build_topic_path(topic_name)
-        self.publisher.publish(topic_path, data=self.game_code)
+        self.publisher.publish(topic_path, data=self.code)
 
     def trigger_pre_guess_stage(self):
         self.publish('topic_pre_guess_stage')
@@ -292,26 +292,26 @@ class Firestore(Ids):
     db = None
 
     team_dict = None
-    game_dict = None
-    game_ref = None
+    dict = None
+    ref = None
 
     def get_team_dict(self):
         return firestore.get_team_dict(self.db, self.team_id)
 
-    def get_game_dict(self):
-        return firestore.get_game_dict(self.db, self.team_id, self.game_id)
+    def get_dict(self):
+        return firestore.get_game_dict(self.db, self.team_id, self.id)
 
     def get_game_dicts(self):
         return firestore.get_game_dicts(self.db, self.team_id)
 
-    def build_game_ref(self):
-        return firestore.get_game_ref(self.db, self.team_id, self.game_id)
+    def build_ref(self):
+        return firestore.get_game_ref(self.db, self.team_id, self.id)
 
-    def set_game_dict(self, merge=False):
-        self.game_ref.set(self.game_dict, merge=merge)
+    def set_dict(self, merge=False):
+        self.ref.set(self.dict, merge=merge)
 
     def delete(self):
-        firestore.delete_game(self.db, self.team_id, self.game_id)
+        firestore.delete_game(self.db, self.team_id, self.id)
 
 
 class Local(Ids):
@@ -320,7 +320,7 @@ class Local(Ids):
     graph_local_path = None
 
     def build_basename(self, kind, ext):
-        return '{}_{}.{}'.format(kind, self.game_id, ext)
+        return '{}_{}.{}'.format(kind, self.id, ext)
 
     def build_local_file_path(self, basename):
         return self.local_dir_path + '/' + basename
@@ -637,8 +637,8 @@ class Views(Blocks):
     def build_exception_view_response(msg):
         return views.build_exception_view_response(msg)
 
-    def build_game_setup_view(self):
-        id_ = self.build_game_setup_view_id()
+    def build_setup_view(self):
+        id_ = self.build_setup_view_id()
         return views.build_game_setup_view(id_)
 
     def build_guess_view(self):
@@ -717,7 +717,7 @@ class Slack(Views):
                 time_left_to_vote)
             self.post_ephemeral(u, msg)
 
-    def send_game_over_notifications(self):
+    def send_is_over_notifications(self):
         for u in self.frozen_guessers:
             msg = ("The bluffer game organized by {} is over!"
                    .format(ids.user_display(self.organizer_id)))
@@ -783,8 +783,8 @@ class Slack(Views):
         self.update_result_stage_upper()
         self.update_result_stage_lower()
 
-    def open_game_setup_view(self, trigger_id):
-        self.open_view(trigger_id, self.build_game_setup_view())
+    def open_setup_view(self, trigger_id):
+        self.open_view(trigger_id, self.build_setup_view())
 
     def open_guess_view(self, trigger_id):
         self.open_view(trigger_id, self.build_guess_view())
@@ -798,7 +798,7 @@ class Exceptions(Version, Question, Time, Truth, Guessers, Voters):
 
     max_running_games = None
     max_guessers = None
-    game_exists = None
+    exists = None
 
     @staticmethod
     def count_running_games(game_dicts):
@@ -829,22 +829,23 @@ class Exceptions(Version, Question, Time, Truth, Guessers, Voters):
     def no_time_left_to_vote(self):
         return self.compute_time_left_to_vote() >= 0
 
-    def game_is_too_old(self):
+    def is_too_old(self):
         now = time.get_now()
-        delta = time.datetime1_minus_datetime2(now, self.game_setup_submission)
+        delta = time.datetime1_minus_datetime2(now, self.setup_submission)
+        print(delta)
         return delta >= self.max_life_span
 
     def version_is_bad(self):
-        return self.version_actual != self.version_db
+        return self.version != self.version_latest
 
-    def game_is_dead(self):
-        if not self.game_exists:
+    def is_dead(self):
+        if not self.exists:
             return True
-        if self.game_setup_submission is None:
+        if self.setup_submission is None:
             return True
-        if self.game_is_too_old():
+        if self.is_too_old():
             return True
-        if self.version_db is None:
+        if self.version is None:
             return True
         if self.version_is_bad():
             return True
@@ -855,8 +856,8 @@ class Exceptions(Version, Question, Time, Truth, Guessers, Voters):
         return ('You are the organizer of a game which is sill running. '
                 'You can only have one game running at a time.')
 
-    def build_game_is_dead_msg(self):
-        if self.game_is_dead():
+    def build_is_dead_msg(self):
+        if self.is_dead():
             return 'This game is dead!'
 
     def build_slash_command_exception_msg(self, game_dicts, app_conversations):
@@ -870,14 +871,15 @@ class Exceptions(Version, Question, Time, Truth, Guessers, Voters):
         if not self.app_is_in_conversation(app_conversations):
             return 'Please invite me first to this conversation!'
 
-    def build_game_setup_view_exception_msg(self, game_dicts):
+    def build_setup_view_exception_msg(self, game_dicts):
         if self.max_nb_of_running_games_reached(game_dicts):
             msg = ('Question: {}\n\n'
                    'Answer: {}\n\n'
                    'Time to guess: {}s\n\n'
-                   'There are already 3 games running! '
+                   'There are already {} games running! '
                    'This is the maximal number allowed.'.format(
-                    self.question, self.truth, self.time_to_guess))
+                    self.question, self.truth, self.time_to_guess,
+                    self.max_running_games))
             return msg
         if self.organizer_has_another_game_running(game_dicts):
             return self.build_organizer_has_another_game_running_msg()
@@ -943,7 +945,7 @@ class Game(PubSub, Firestore, Slack, Exceptions):
             local_dir_path,
             logger,
     ):
-        self.game_id = game_id
+        self.id = game_id
         self.secret_prefix = secret_prefix
         self.project_id = project_id
         self.publisher = publisher
@@ -952,14 +954,14 @@ class Game(PubSub, Firestore, Slack, Exceptions):
         self.local_dir_path = local_dir_path
         self.logger = logger
 
-        self.game_code = self.build_game_code()
+        self.code = self.build_code()
 
         self.slash_command_compact = self.get_slash_command_compact()
         self.team_id = self.get_team_id()
         self.channel_id = self.get_channel_id()
         self.organizer_id = self.get_organizer_id()
 
-        self.game_ref = self.build_game_ref()
+        self.ref = self.build_ref()
 
         self.bucket_dir_name = self.team_id
 
@@ -968,19 +970,19 @@ class Game(PubSub, Firestore, Slack, Exceptions):
 
         self.slack_client = self.build_slack_client()
 
-        self.game_dict = self.get_game_dict()
-        if self.game_dict:
-            self.game_exists = True
-            self.diffuse_game_dict()
+        self.dict = self.get_dict()
+        if self.dict:
+            self.exists = True
+            self.diffuse_dict()
         else:
-            self.game_exists = False
+            self.exists = False
 
-    def diffuse_dict(self, d):
+    def diffuse(self, d):
         for key in d:
             self.__dict__[key] = d[key]
 
     def diffuse_team_dict(self):
-        self.diffuse_dict(self.team_dict)
+        self.diffuse(self.team_dict)
 
-    def diffuse_game_dict(self):
-        self.diffuse_dict(self.game_dict)
+    def diffuse_dict(self):
+        self.diffuse(self.dict)

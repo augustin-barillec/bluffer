@@ -1,7 +1,7 @@
 #!/bin/bash
 
-source ./ports.sh
-source./project_id.sh
+source ports.sh
+source project_id.sh
 
 PORT=8085
 kill -9 $(lsof -t -i tcp:$PORT)
