@@ -214,25 +214,23 @@ class Results(Proposals, Voters):
 
 class Time(Ids):
 
-    slash_command_compact = None
-
     setup_submission = None
-    max_life_span = None
-
     time_to_guess = None
     time_to_vote = None
-
     upper_ts = None
     lower_ts = None
-
     guess_start = None
     vote_start = None
-
     guess_deadline = None
     vote_deadline = None
+    guess_stage_last_trigger = None
+    vote_stage_last_trigger = None
 
     def get_slash_command_compact(self):
         return ids.game_id_to_slash_command_compact(self.id)
+
+    def build_max_life_span(self):
+        return self.time_to_guess + self.time_to_vote + 300
 
     def compute_guess_deadline(self):
         return time.compute_deadline(self.guess_start, self.time_to_guess)
@@ -251,11 +249,9 @@ class PubSub(Ids):
 
     project_id = None
     publisher = None
-
     pre_guess_stage_already_triggered = False
     pre_vote_stage_already_triggered = False
     pre_result_stage_already_triggered = False
-
     guess_stage_over = False
     vote_stage_over = False
     result_stage_over = False
@@ -290,10 +286,9 @@ class PubSub(Ids):
 class Firestore(Ids):
 
     db = None
-
-    team_dict = None
     dict = None
     ref = None
+    post_clean = None
 
     def get_team_dict(self):
         return firestore.get_team_dict(self.db, self.team_id)
@@ -796,6 +791,7 @@ class Slack(Views):
 
 class Exceptions(Version, Question, Time, Truth, Guessers, Voters):
 
+    max_life_span = None
     max_running_games = None
     max_guessers = None
     exists = None
@@ -832,7 +828,6 @@ class Exceptions(Version, Question, Time, Truth, Guessers, Voters):
     def is_too_old(self):
         now = time.get_now()
         delta = time.datetime1_minus_datetime2(now, self.setup_submission)
-        print(delta)
         return delta >= self.max_life_span
 
     def version_is_bad(self):
@@ -850,6 +845,20 @@ class Exceptions(Version, Question, Time, Truth, Guessers, Voters):
         if self.version_is_bad():
             return True
         return False
+
+    @staticmethod
+    def stage_was_recently_trigger(last_trigger):
+        if last_trigger is None:
+            return False
+        delta = time.datetime1_minus_datetime2(
+            time.get_now(), last_trigger)
+        return delta < 30
+
+    def guess_stage_was_recently_trigger(self):
+        return self.stage_was_recently_trigger(self.guess_stage_last_trigger)
+
+    def vote_stage_was_recently_trigger(self):
+        return self.stage_was_recently_trigger(self.vote_stage_last_trigger)
 
     @staticmethod
     def build_organizer_has_another_game_running_msg():
@@ -943,8 +952,8 @@ class Game(PubSub, Firestore, Slack, Exceptions):
             db,
             bucket,
             local_dir_path,
-            logger,
-    ):
+            logger):
+
         self.id = game_id
         self.secret_prefix = secret_prefix
         self.project_id = project_id

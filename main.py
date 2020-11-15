@@ -86,20 +86,25 @@ def message_actions(request):
         if view_callback_id.startswith(secret_prefix + '#game_setup_view'):
             question, truth, time_to_guess = views.collect_game_setup(
                 view)
-            game_setup_submission = time.get_now()
-            game.dict = {
-                'version': game.version_latest,
-                'setup_submission': game_setup_submission,
-                'question': question,
-                'truth': truth,
-                'time_to_guess': time_to_guess,
-            }
-            game.diffuse_dict()
+            game.setup_submission = time.get_now()
+            game.question = question
+            game.truth = truth
+            game.time_to_guess = time_to_guess
+            game.max_life_span = game.build_max_life_span()
+
             game_dicts = game.get_game_dicts()
             exception_msg = game.build_setup_view_exception_msg(
                 game_dicts)
             if exception_msg:
                 return game.build_exception_view_response(exception_msg)
+
+            game.dict = {
+                'version': game.version_latest,
+                'setup_submission': game.setup_submission,
+                'question': game.question,
+                'truth': game.truth,
+                'time_to_guess': game.time_to_guess,
+                'max_life_span': game.max_life_span}
             game.set_dict()
             game.trigger_pre_guess_stage()
             logger.info('pre_guess_stage triggered, game_id={}'.format(
@@ -177,6 +182,8 @@ def pre_guess_stage(event, context):
     if game.is_dead():
         return make_response('', 200)
     if game.pre_guess_stage_already_triggered:
+        logger.info('aborted cause already triggered, game_id={}'.format(
+            game_id))
         return make_response('', 200)
     else:
         game.dict['pre_guess_stage_already_triggered'] = True
@@ -221,6 +228,12 @@ def guess_stage(event, context):
         return make_response('', 200)
     if game.guess_stage_over:
         return make_response('', 200)
+    if game.guess_stage_was_recently_trigger():
+        logger.info('aborted cause recently triggered, game_id={}'.format(
+            game_id))
+        return make_response('', 200)
+    game.dict['guess_stage_last_trigger'] = time.get_now()
+    game.set_dict(merge=True)
 
     while True:
         game = build_game(game_id)
@@ -252,6 +265,8 @@ def pre_vote_stage(event, context):
     if game.is_dead():
         return make_response('', 200)
     if game.pre_vote_stage_already_triggered:
+        logger.info('aborted cause already triggered, game_id={}'.format(
+            game_id))
         return make_response('', 200)
     else:
         game.dict['pre_vote_stage_already_triggered'] = True
@@ -292,6 +307,12 @@ def vote_stage(event, context):
         return make_response('', 200)
     if game.vote_stage_over:
         return make_response('', 200)
+    if game.vote_stage_was_recently_trigger():
+        logger.info('aborted cause recently triggered, game_id={}'.format(
+            game_id))
+        return make_response('', 200)
+    game.dict['vote_stage_last_trigger'] = time.get_now()
+    game.set_dict(merge=True)
 
     while True:
         game = build_game(game_id)
@@ -324,6 +345,8 @@ def pre_result_stage(event, context):
     if game.is_dead():
         return make_response('', 200)
     if game.pre_result_stage_already_triggered:
+        logger.info('aborted cause already triggered, game_id={}'.format(
+            game_id))
         return make_response('', 200)
     else:
         game.dict['pre_result_stage_already_triggered'] = True
@@ -342,6 +365,7 @@ def pre_result_stage(event, context):
     game.dict['results'] = game.results
     game.dict['max_score'] = game.max_score
     game.dict['winners'] = game.winners
+    game.dict['graph_url'] = game.graph_url
     game.set_dict(merge=True)
 
     game.update_result_stage()
@@ -353,7 +377,6 @@ def pre_result_stage(event, context):
 
 def result_stage(event, context):
     assert context == context
-
     game_id = pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
 
@@ -364,6 +387,9 @@ def result_stage(event, context):
 
     game.dict['result_stage_over'] = True
     game.set_dict(merge=True)
+
+    if game.post_clean:
+        game.delete()
     logger.info('sucessfully ended, game_id={}'.format(game_id))
     return make_response('', 200)
 
@@ -377,3 +403,4 @@ def erase(event, context):
             game = build_game(g.id)
             if game.is_dead():
                 game.delete()
+                logger.info('game deleted, game_id={}'.format(g.id))
