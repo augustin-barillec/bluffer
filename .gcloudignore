@@ -1,1 +1,4 @@
-/deprecated
+/dev
+/venv
+
+requirements-dev.txt

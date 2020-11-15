@@ -31,6 +31,3 @@ def get_game_dicts(db, team_id):
     games_ref = get_games_ref(db, team_id)
     return {g.id: g.to_dict() for g in games_ref.stream()}
 
-
-def delete_game(db, team_id, game_id):
-    get_game_ref(db, team_id, game_id).delete()
