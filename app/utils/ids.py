@@ -44,22 +44,38 @@ def game_id_to_organizer_id(game_id):
     return game_id_to_ids(game_id)[2]
 
 
-def user_display(user_id):
-    return '<@{}>'.format(user_id)
+class IdBuilder:
+    def __init__(self, secret_prefix, game_id):
+        self.secret_prefix = secret_prefix
+        self.game_id = game_id
 
+    def get_team_id(self):
+        return game_id_to_team_id(self.game_id)
 
-def user_displays(user_ids):
-    return ' '.join([user_display(id_) for id_ in user_ids])
+    def get_organizer_id(self):
+        return game_id_to_organizer_id(self.game_id)
 
+    def get_channel_id(self):
+        return game_id_to_channel_id(self.game_id)
 
-def sort_users(users):
-    res = sorted(users, key=lambda k: users[k][0])
-    return res
+    def build_code(self):
+        return self.game_id.encode("utf-8")
 
+    def build_slack_object_id(self, object_name):
+        return build_slack_object_id(
+            self.secret_prefix, object_name, self.game_id)
 
-def build_users_msg(users, kind, no_users_msg):
-    if not users:
-        return no_users_msg
-    users = sort_users(users)
-    msg = '{}: {}'.format(kind, user_displays(users))
-    return msg
+    def build_setup_view_id(self):
+        return self.build_slack_object_id('game_setup_view')
+
+    def build_guess_view_id(self):
+        return self.build_slack_object_id('guess_view')
+
+    def build_vote_view_id(self):
+        return self.build_slack_object_id('vote_view')
+
+    def build_guess_button_block_id(self):
+        return self.build_slack_object_id('guess_button_block')
+
+    def build_vote_button_block_id(self):
+        return self.build_slack_object_id('vote_button_block')

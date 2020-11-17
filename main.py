@@ -10,7 +10,8 @@ import google.cloud.storage
 from copy import deepcopy
 from datetime import datetime
 from flask import make_response
-from app.game import Game
+from app.game import Game, ProposalsBrowser, compute_max_score, \
+    compute_winners, GraphBuilder, GraphDrawer, GraphUploader
 from app.utils import firestore, ids, pubsub, time, views
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
@@ -200,8 +201,8 @@ def pre_guess_stage(event, context):
     game.potential_guessers = game.slack_operator.get_potential_guessers()
     game.guessers = dict()
     game.guess_start = time.get_now()
-    game.guess_deadline = time.compute_deadline(
-        game.guess_start, game.time_to_guess)
+    game.guess_deadline = game.deadline_builder.compute_guess_deadline()
+
     game.dict['upper_ts'] = game.upper_ts
     game.dict['lower_ts'] = game.potential_guessers
     game.dict['potential_guessers'] = game.potential_guessers
@@ -283,13 +284,15 @@ def pre_vote_stage(event, context):
 
     game.indexed_signed_proposals = \
         game.proposals_builder.build_indexed_signed_proposals()
+    proposals_browser = ProposalsBrowser(game.indexed_signed_proposals)
+    game.truth_index = proposals_browser.compute_truth_index()
     game.potential_voters = game.frozen_guessers
     game.voters = dict()
     game.vote_start = time.get_now()
-    game.vote_deadline = time.compute_deadline(
-        game.vote_start, game.time_to_vote)
+    game.vote_deadline = game.deadline_builder.compute_vote_deadline()
     for attribute in [
         'indexed_signed_proposals',
+        'truth_index',
         'potential_voters',
         'voters',
         'vote_start',
@@ -361,19 +364,21 @@ def pre_result_stage(event, context):
 
     game.slack_operator.update_pre_result_stage()
 
-    game.truth_index = game.proposals_browser.compute_truth_index()
     game.results = game.results_builder.build_results()
-    game.max_score = game.results_builder.compute_max_score()
-    game.winners = game.compute_winners()
-    game.graph = game.build_graph()
-    game.graph_local_path = game.build_graph_local_path()
-    game.draw_graph()
-    game.graph_url = game.upload_graph_to_gs()
+    game.max_score = compute_max_score(game.results)
+    game.winners = compute_winners(game.results, game.max_score)
+    graph = GraphBuilder(game.results, game.truth_index).build_graph()
+    GraphDrawer(graph, game.truth_index, game.results, game.winners,
+                game.graph_local_path).draw_graph()
+    game.graph_url = GraphUploader(
+        game.bucket,
+        game.truth_index,
+        game.graph_local_path).upload_graph_to_gs()
     game.dict['results'] = game.results
     game.dict['max_score'] = game.max_score
     game.dict['winners'] = game.winners
     game.dict['graph_url'] = game.graph_url
-    game.set_dict(merge=True)
+    game.db_editor.set_dict(merge=True)
 
     game.update_result_stage()
     game.send_is_over_notifications()

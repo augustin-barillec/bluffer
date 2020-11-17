@@ -40,3 +40,7 @@ def build_time_display(total_seconds):
         total_seconds)
     seconds_approx = seconds - seconds % 5
     return '{}min {}s'.format(minutes, seconds_approx)
+
+
+def build_max_life_span(time_to_guess, time_to_vote):
+    return time_to_guess + time_to_vote + 300

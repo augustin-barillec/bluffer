@@ -1,5 +1,6 @@
 import networkx as nx
 import matplotlib.pyplot as plt
+from app.utils import storage
 
 
 def build_graph(results, truth_index):
@@ -51,3 +52,7 @@ def draw_graph(
     nx.draw_networkx_labels(g, pos, labels=winner_labels, font_color='g')
 
     plt.savefig(graph_local_path)
+
+
+def upload_graph_to_gs(bucket, bucket_dir_name, graph_local_path):
+    return storage.upload_to_gs(bucket, bucket_dir_name, graph_local_path)
