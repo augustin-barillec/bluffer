@@ -1,5 +1,6 @@
 from app import utils
 
+
 def get_channel_members(slack_client, channel_id):
     return slack_client.api_call(
         'conversations.members',
@@ -85,7 +86,7 @@ def get_app_conversations(slack_client):
         types='public_channel, private_channel, mpim, im')['channels']
 
 
-class Slack:
+class SlackOperator:
     def __init__(
             self,
             slack_client,
@@ -93,18 +94,12 @@ class Slack:
             organizer_id,
             upper_ts,
             lower_ts,
-            frozen_guessers,
-            potential_voters,
-            vote_deadline,
             view_builder):
         self.slack_client = slack_client
         self.channel_id = channel_id
         self.organizer_id = organizer_id
         self.upper_ts = upper_ts
         self.lower_ts = lower_ts
-        self.frozen_guessers = frozen_guessers
-        self.potential_voters = potential_voters
-        self.vote_deadline = vote_deadline
         self.view_builder = view_builder
 
     def get_potential_guessers(self):
@@ -135,96 +130,6 @@ class Slack:
     def update_lower(self, blocks_):
         self.update_message(blocks_, self.lower_ts)
 
-    def send_vote_reminders(self):
-        time_left_to_vote = utils.time.compute_time_left(self.vote_deadline)
-        for u in self.potential_voters:
-            msg_template = (
-                'Hey {}, you can now vote in the bluffer game ' 
-                'organized by {}!')
-            msg = msg_template.format(
-                utils.users.user_display(u),
-                utils.users.user_display(self.organizer_id),
-                time_left_to_vote)
-            self.post_ephemeral(u, msg)
-
-    def send_is_over_notifications(self):
-        for u in self.frozen_guessers:
-            msg = ("The bluffer game organized by {} is over!"
-                   .format(utils.users.user_display(self.organizer_id)))
-            self.post_ephemeral(u, msg)
-
-    def post_pre_guess_stage_upper(self):
-        return self.post_message(
-            self.block_builder.build_pre_guess_stage_upper_blocks())
-
-    def post_pre_guess_stage_lower(self):
-        return self.post_message(
-            self.block_builder.build_pre_guess_stage_lower_blocks())
-
-    def update_pre_vote_stage_upper(self):
-        self.update_upper(
-            self.block_builder.build_pre_vote_stage_upper_blocks())
-
-    def update_pre_vote_stage_lower(self):
-        self.update_lower(
-            self.block_builder.build_pre_vote_stage_lower_blocks())
-
-    def update_pre_result_stage_upper(self):
-        self.update_upper(
-            self.block_builder.build_pre_result_stage_upper_blocks())
-
-    def update_pre_result_stage_lower(self):
-        self.update_lower(
-            self.block_builder.build_pre_result_stage_lower_blocks())
-
-    def update_guess_stage_upper(self):
-        self.update_upper(
-            self.block_builder.build_guess_stage_upper_blocks())
-
-    def update_guess_stage_lower(self):
-        self.update_lower(
-            self.block_builder.build_guess_stage_lower_blocks())
-
-    def update_vote_stage_upper(self):
-        self.update_upper(
-            self.block_builder.build_vote_stage_upper_blocks())
-
-    def update_vote_stage_lower(self):
-        self.update_lower(
-            self.block_builder.build_vote_stage_lower_blocks())
-
-    def update_result_stage_upper(self):
-        self.update_upper(
-            self.block_builder.build_result_stage_upper_blocks())
-
-    def update_result_stage_lower(self):
-        self.update_lower(
-            self.block_builder.build_result_stage_lower_blocks())
-
-    def post_pre_guess_stage(self):
-        return self.post_pre_guess_stage_upper(), \
-               self.post_pre_guess_stage_lower()
-
-    def update_pre_vote_stage(self):
-        self.update_pre_vote_stage_upper()
-        self.update_pre_vote_stage_lower()
-
-    def update_pre_result_stage(self):
-        self.update_pre_result_stage_upper()
-        self.update_pre_result_stage_lower()
-
-    def update_guess_stage(self):
-        self.update_guess_stage_upper()
-        self.update_guess_stage_lower()
-
-    def update_vote_stage(self):
-        self.update_vote_stage_upper()
-        self.update_vote_stage_lower()
-
-    def update_result_stage(self):
-        self.update_result_stage_upper()
-        self.update_result_stage_lower()
-
     def open_setup_view(self, trigger_id):
         self.open_view(trigger_id, self.view_builder.build_setup_view())
 
@@ -234,3 +139,138 @@ class Slack:
     def open_vote_view(self, trigger_id, voter):
         view = self.view_builder.build_vote_view(voter)
         self.open_view(trigger_id, view)
+
+
+def send_vote_reminders(
+        organizer_id, vote_deadline, potential_voters, slack_operator):
+    time_left_to_vote = utils.time.compute_time_left(vote_deadline)
+    for u in potential_voters:
+        msg_template = (
+            'Hey {}, you can now vote in the bluffer game '
+            'organized by {}!')
+        msg = msg_template.format(
+            utils.users.user_display(u),
+            utils.users.user_display(organizer_id),
+            time_left_to_vote)
+        slack_operator.post_ephemeral(u, msg)
+
+
+def send_is_over_notifications(
+        organizer_id, frozen_guessers, slack_operator):
+    for u in frozen_guessers:
+        msg = ("The bluffer game organized by {} is over!"
+               .format(utils.users.user_display(organizer_id)))
+        slack_operator.post_ephemeral(u, msg)
+
+
+def post_pre_guess_stage_upper(organizer_id, slack_operator):
+    return slack_operator.post_message(
+        utils.blocks.build_pre_guess_stage_upper_blocks(organizer_id))
+
+
+def post_pre_guess_stage_lower(slack_operator):
+    return slack_operator.post_message(
+        utils.blocks.build_pre_guess_stage_lower_blocks())
+
+
+def update_pre_vote_stage_upper(organizer_id, question, slack_operator):
+    slack_operator.update_upper(
+        utils.blocks.build_pre_vote_stage_upper_blocks(
+            organizer_id, question))
+
+
+def update_pre_vote_stage_lower(slack_operator):
+    slack_operator.update_lower(
+        utils.blocks.build_pre_vote_stage_lower_blocks())
+
+
+def update_pre_result_stage_upper(organizer_id, question, slack_operator):
+    slack_operator.update_upper(
+        utils.blocks.build_pre_result_stage_upper_blocks(
+            organizer_id, question))
+
+
+def update_pre_result_stage_lower(slack_operator):
+    slack_operator.update_lower(
+        utils.blocks.build_pre_result_stage_lower_blocks())
+
+
+def update_guess_stage_upper(
+        organizer_id, question, id_builder, slack_operator):
+    slack_operator.update_upper(
+        utils.blocks.build_guess_stage_upper_blocks(
+            organizer_id, question, id_builder))
+
+
+def update_guess_stage_lower(guessers, time_left_to_guess, slack_operator):
+    slack_operator.update_lower(
+        utils.blocks.build_guess_stage_lower_blocks(
+            time_left_to_guess, guessers))
+
+
+def update_vote_stage_upper(
+        organizer_id, question, id_builder, proposals_browser, slack_operator):
+    slack_operator.update_upper(
+        utils.blocks.build_vote_stage_upper_blocks(
+            organizer_id, question, id_builder, proposals_browser))
+
+
+def update_vote_stage_lower(
+        voters, potential_voters, time_left_to_vote, slack_operator):
+    slack_operator.update_lower(
+        utils.blocks.build_vote_stage_lower_blocks(
+            potential_voters, voters, time_left_to_vote))
+
+
+def update_result_stage_upper(
+        title, question, truth, truth_index, results, frozen_guessers,
+        frozen_voters, max_score, winners, graph_url, slack_operator):
+    slack_operator.update_upper(
+        utils.blocks.build_result_stage_upper_blocks(
+            title, question, truth, truth_index, results, frozen_guessers,
+            frozen_voters, max_score, winners, graph_url))
+
+
+def update_result_stage_lower(slack_operator):
+    slack_operator.update_lower(utils.blocks.build_result_stage_lower_blocks())
+
+
+def post_pre_guess_stage(organizer_id, slack_operator):
+    return post_pre_guess_stage_upper(organizer_id, slack_operator), \
+           post_pre_guess_stage_lower(slack_operator)
+
+
+def update_pre_vote_stage(organizer_id, question, slack_operator):
+    update_pre_vote_stage_upper(organizer_id, question, slack_operator)
+    update_pre_vote_stage_lower(slack_operator)
+
+
+def update_pre_result_stage(organizer_id, question, slack_operator):
+    update_pre_result_stage_upper(organizer_id, question, slack_operator)
+    update_pre_result_stage_lower(slack_operator)
+
+
+def update_guess_stage(
+        organizer_id, question, guessers, time_left_to_guess, id_builder,
+        slack_operator):
+    update_guess_stage_upper(
+        organizer_id, question, id_builder, slack_operator)
+    update_guess_stage_lower(guessers, time_left_to_guess, slack_operator)
+
+
+def update_vote_stage(
+        organizer_id, question, voters, potential_voters, time_left_to_vote,
+        id_builder, proposals_browser, slack_operator):
+    update_vote_stage_upper(
+        organizer_id, question, id_builder, proposals_browser, slack_operator)
+    update_vote_stage_lower(
+        voters, potential_voters, time_left_to_vote, slack_operator)
+
+
+def update_result_stage(
+        title, question, truth, truth_index, results, frozen_guessers,
+        frozen_voters, max_score, winners, graph_url, slack_operator):
+    update_result_stage_upper(
+        title, question, truth, truth_index, results, frozen_guessers,
+        frozen_voters, max_score, winners, graph_url, slack_operator)
+    update_result_stage_lower(slack_operator)
