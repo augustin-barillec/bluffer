@@ -58,14 +58,14 @@ class ResultsBuilder:
         return results
 
 
-def compute_max_score(results):
-    scores = [r['score'] for r in results if 'score' in r]
+def compute_max_score(game):
+    scores = [r['score'] for r in game.results if 'score' in r]
     return scores[0]
 
 
-def compute_winners(results, max_score):
+def compute_winners(game):
     res = []
-    for r in results:
-        if r['score'] == max_score:
+    for r in game.results:
+        if r['score'] == game.max_score:
             res.append(r['guesser'])
     return res

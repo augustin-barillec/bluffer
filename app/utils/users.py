@@ -1,13 +1,15 @@
+def compute_remaining_potential_users(potential_users, users):
+    return {pu: potential_users[pu]
+            for pu in potential_users
+            if pu not in users}
+
+
 def compute_remaining_potential_guessers(potential_guessers, guessers):
-    return {pv: potential_guessers[pv]
-            for pv in potential_guessers
-            if pv not in guessers}
+    return compute_remaining_potential_users(potential_guessers, guessers)
 
 
 def compute_remaining_potential_voters(potential_voters, voters):
-    return {pv: potential_voters[pv]
-            for pv in potential_voters
-            if pv not in voters}
+    return compute_remaining_potential_users(potential_voters, voters)
 
 
 def user_display(user_id):

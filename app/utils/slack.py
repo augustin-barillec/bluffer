@@ -141,26 +141,23 @@ class SlackOperator:
         self.open_view(trigger_id, view)
 
 
-def send_vote_reminders(
-        organizer_id, vote_deadline, potential_voters, slack_operator):
-    time_left_to_vote = utils.time.compute_time_left(vote_deadline)
-    for u in potential_voters:
+def send_vote_reminders(game):
+    for u in game.potential_voters:
         msg_template = (
             'Hey {}, you can now vote in the bluffer game '
             'organized by {}!')
         msg = msg_template.format(
             utils.users.user_display(u),
-            utils.users.user_display(organizer_id),
-            time_left_to_vote)
-        slack_operator.post_ephemeral(u, msg)
+            utils.users.user_display(game.organizer_id),
+            game.time_left_to_vote)
+        game.slack_operator.post_ephemeral(u, msg)
 
 
-def send_is_over_notifications(
-        organizer_id, frozen_guessers, slack_operator):
-    for u in frozen_guessers:
+def send_is_over_notifications(game):
+    for u in game.frozen_guessers:
         msg = ("The bluffer game organized by {} is over!"
-               .format(utils.users.user_display(organizer_id)))
-        slack_operator.post_ephemeral(u, msg)
+               .format(utils.users.user_display(game.organizer_id)))
+        game.slack_operator.post_ephemeral(u, msg)
 
 
 def post_pre_guess_stage_upper(organizer_id, slack_operator):
@@ -202,10 +199,10 @@ def update_guess_stage_upper(
             organizer_id, question, id_builder))
 
 
-def update_guess_stage_lower(guessers, time_left_to_guess, slack_operator):
-    slack_operator.update_lower(
+def update_guess_stage_lower(game):
+    game.slack_operator.update_lower(
         utils.blocks.build_guess_stage_lower_blocks(
-            time_left_to_guess, guessers))
+            game.time_left_to_guess, game.guessers))
 
 
 def update_vote_stage_upper(
@@ -215,62 +212,59 @@ def update_vote_stage_upper(
             organizer_id, question, id_builder, proposals_browser))
 
 
-def update_vote_stage_lower(
-        voters, potential_voters, time_left_to_vote, slack_operator):
-    slack_operator.update_lower(
+def update_vote_stage_lower(game):
+    game.slack_operator.update_lower(
         utils.blocks.build_vote_stage_lower_blocks(
-            potential_voters, voters, time_left_to_vote))
+            game.potential_voters, game.voters, game.time_left_to_vote))
 
 
 def update_result_stage_upper(
-        title, question, truth, truth_index, results, frozen_guessers,
+        organizer_id, question, truth, truth_index, results, frozen_guessers,
         frozen_voters, max_score, winners, graph_url, slack_operator):
     slack_operator.update_upper(
         utils.blocks.build_result_stage_upper_blocks(
-            title, question, truth, truth_index, results, frozen_guessers,
-            frozen_voters, max_score, winners, graph_url))
+            organizer_id, question, truth, truth_index, results,
+            frozen_guessers, frozen_voters, max_score, winners, graph_url))
 
 
 def update_result_stage_lower(slack_operator):
     slack_operator.update_lower(utils.blocks.build_result_stage_lower_blocks())
 
 
-def post_pre_guess_stage(organizer_id, slack_operator):
-    return post_pre_guess_stage_upper(organizer_id, slack_operator), \
-           post_pre_guess_stage_lower(slack_operator)
+def post_pre_guess_stage(game):
+    return post_pre_guess_stage_upper(
+        game.organizer_id, game.slack_operator), \
+           post_pre_guess_stage_lower(game.slack_operator)
 
 
-def update_pre_vote_stage(organizer_id, question, slack_operator):
-    update_pre_vote_stage_upper(organizer_id, question, slack_operator)
-    update_pre_vote_stage_lower(slack_operator)
+def update_pre_vote_stage(game):
+    update_pre_vote_stage_upper(
+        game.organizer_id, game.question, game.slack_operator)
+    update_pre_vote_stage_lower(game.slack_operator)
 
 
-def update_pre_result_stage(organizer_id, question, slack_operator):
-    update_pre_result_stage_upper(organizer_id, question, slack_operator)
-    update_pre_result_stage_lower(slack_operator)
+def update_pre_result_stage(game):
+    update_pre_result_stage_upper(
+        game.organizer_id, game.question, game.slack_operator)
+    update_pre_result_stage_lower(game.slack_operator)
 
 
-def update_guess_stage(
-        organizer_id, question, guessers, time_left_to_guess, id_builder,
-        slack_operator):
+def update_guess_stage(game):
     update_guess_stage_upper(
-        organizer_id, question, id_builder, slack_operator)
-    update_guess_stage_lower(guessers, time_left_to_guess, slack_operator)
+        game.organizer_id, game.question, game.id_builder, game.slack_operator)
+    update_guess_stage_lower(game)
 
 
-def update_vote_stage(
-        organizer_id, question, voters, potential_voters, time_left_to_vote,
-        id_builder, proposals_browser, slack_operator):
+def update_vote_stage(game):
     update_vote_stage_upper(
-        organizer_id, question, id_builder, proposals_browser, slack_operator)
-    update_vote_stage_lower(
-        voters, potential_voters, time_left_to_vote, slack_operator)
+        game.organizer_id, game.question, game.id_builder,
+        game.proposals_browser, game.slack_operator)
+    update_vote_stage_lower(game)
 
 
-def update_result_stage(
-        title, question, truth, truth_index, results, frozen_guessers,
-        frozen_voters, max_score, winners, graph_url, slack_operator):
+def update_result_stage(game):
     update_result_stage_upper(
-        title, question, truth, truth_index, results, frozen_guessers,
-        frozen_voters, max_score, winners, graph_url, slack_operator)
-    update_result_stage_lower(slack_operator)
+        game.organizer_id, game.question, game.truth, game.truth_index,
+        game.results, game.frozen_guessers, game.frozen_voters, game.max_score,
+        game.winners, game.graph_url, game.slack_operator)
+    update_result_stage_lower(game.slack_operator)

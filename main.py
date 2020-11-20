@@ -12,7 +12,7 @@ from datetime import datetime
 from flask import make_response
 from app.game import Game
 from app.utils import firestore, ids, pubsub, time, views, users, proposals, \
-    results, graph, slack
+    results, graph, slack, exceptions
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
                     level='INFO')
@@ -58,8 +58,8 @@ def slash_command(request):
 
     game_dicts = game.firestore_reader.get_game_dicts()
     app_conversations = game.firestore_reader.get_app_conversations()
-    exception_msg = game.exceptions.build_slash_command_exception_msg(
-        game_dicts, app_conversations)
+    exception_msg = exceptions.build_slash_command_exception_msg(
+        game, game_dicts, app_conversations)
     if exception_msg:
         game.slack_operator.open_exception_view(trigger_id, exception_msg)
         return make_response('', 200)
@@ -95,11 +95,10 @@ def message_actions(request):
                 game.time_to_guess, game.time_to_vote)
 
             game_dicts = game.firestore_reader.get_game_dicts()
-            exception_msg = game.exceptions.build_setup_view_exception_msg(
-                game_dicts)
+            exception_msg = exceptions.build_setup_view_exception_msg(
+                game, game_dicts)
             if exception_msg:
-                return game.slack_operator.build_exception_view_response(
-                    exception_msg)
+                return views.build_exception_view_response(exception_msg)
 
             game.dict = {
                 'version': game.version,
@@ -114,39 +113,34 @@ def message_actions(request):
                 game_id))
             return make_response('', 200)
 
-        exception_msg = game.exceptions.build_is_dead_msg()
+        exception_msg = exceptions.build_game_is_dead_msg(game)
         if exception_msg:
-            return game.exceptions.build_exception_view_response(exception_msg)
+            return views.build_exception_view_response(exception_msg)
 
         if view_callback_id.startswith(secret_prefix + '#guess_view'):
             guess = views.collect_guess(view)
-            exception_msg = game.exceptions.build_guess_view_exception_msg(
-                guess)
+            exception_msg = exceptions.build_guess_view_exception_msg(
+                guess, game)
             if exception_msg:
-                return game.exceptions.build_exception_view_response(
-                    exception_msg)
+                return views.build_exception_view_response(exception_msg)
             guess_start = time.get_now()
             game.dict['guessers'][user_id] = [guess_start, guess]
             game.firestore_editor.set_dict(merge=True)
-            time_left_to_guess = time.compute_time_left(game.guess_deadline)
-            slack.update_guess_stage_lower(
-                game.guessers, time_left_to_guess, game.slack_operator)
+            slack.update_guess_stage_lower(game)
             logger.info('guess recorded, guesser_id={}, game_id={}'.format(
                 game_id, user_id))
             return make_response('', 200)
 
         if view_callback_id.startswith(secret_prefix + '#vote_view'):
             vote = views.collect_vote(view)
-            exception_msg = game.exceptions.build_vote_view_exception_msg(vote)
+            exception_msg = exceptions.build_vote_view_exception_msg(
+                vote, game)
             if exception_msg:
-                return game.exceptions.build_exception_view_response(
-                    exception_msg)
+                return views.build_exception_view_response(exception_msg)
             vote_start = time.get_now()
             game.dict['voters'][user_id] = [vote_start, vote]
             game.firestore_editor.set_dict(merge=True)
-            time_left_to_vote = time.compute_time_left(game.vote_deadline)
-            slack.update_guess_stage_lower(
-                game.guessers, time_left_to_vote, game.slack_operator)
+            slack.update_guess_stage_lower(game)
             logger.info('vote recorded, voter_id={}, game_id={} '.format(
                 game_id, user_id))
             return make_response('', 200)
@@ -159,13 +153,13 @@ def message_actions(request):
         game_id = ids.slack_object_id_to_game_id(action_block_id)
         game = build_game(game_id)
 
-        exception_msg = game.exceptions.build_is_dead_msg()
+        exception_msg = exceptions.build_game_is_dead_msg(game)
         if exception_msg:
-            return game.exceptions.build_exception_view_response(exception_msg)
+            return views.build_exception_view_response(exception_msg)
 
         if action_block_id.startswith(secret_prefix + '#guess_button_block'):
-            exception_msg = game.exceptions.build_guess_button_exception_msg(
-                user_id)
+            exception_msg = exceptions.build_guess_button_exception_msg(
+                user_id, game)
             if exception_msg:
                 game.slack_operator.open_exception_view(
                     trigger_id, exception_msg)
@@ -176,10 +170,11 @@ def message_actions(request):
             return make_response('', 200)
 
         if action_block_id.startswith(secret_prefix + '#vote_button_block'):
-            exception_msg = game.exceptions.build_vote_button_exception_msg(
-                user_id)
+            exception_msg = exceptions.build_vote_button_exception_msg(
+                user_id, game)
             if exception_msg:
-                game.exceptions.open_exception_view(trigger_id, exception_msg)
+                game.slack_operator.open_exception_view(
+                    trigger_id, exception_msg)
                 return make_response('', 200)
             game.slack_operator.open_vote_view(trigger_id, user_id)
             logger.info('vote_view opened, user_id={}, game_id={}'.format(
@@ -192,11 +187,10 @@ def pre_guess_stage(event, context):
     game_id = pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
 
-    if game.exceptions.is_dead():
+    if exceptions.game_is_dead(game):
         return make_response('', 200)
     if game.pre_guess_stage_already_triggered:
-        logger.info('aborted cause already triggered, game_id={}'.format(
-            game_id))
+        logger.info(exceptions.build_aborted_cause_already_triggered_msg(game))
         return make_response('', 200)
     else:
         game.dict['pre_guess_stage_already_triggered'] = True
@@ -226,7 +220,7 @@ def pre_guess_stage(event, context):
         game.dict[attribute] = game.__dict__[attribute]
     game.firestore_editor.set_dict(merge=True)
 
-    game.slack_operator.update_guess_stage()
+    slack.update_guess_stage(game)
     game.slack_operator.trigger_guess_stage()
     logger.info('guess_stage triggered, game_id={}'.format(game_id))
     return make_response('', 200)
@@ -238,24 +232,22 @@ def guess_stage(event, context):
     game_id = pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
 
-    if game.exceptions.is_dead():
+    if exceptions.game_is_dead(game):
         return make_response('', 200)
     if game.guess_stage_over:
         return make_response('', 200)
-    if game.exceptions.guess_stage_was_recently_trigger():
-        logger.info('aborted cause recently triggered, game_id={}'.format(
-            game_id))
+    if exceptions.guess_stage_was_recently_trigger(game):
+        logger.info(exceptions.build_aborted_cause_recently_triggered_msg(
+            game))
         return make_response('', 200)
     game.dict['guess_stage_last_trigger'] = time.get_now()
     game.firestore_editor.set_dict(merge=True)
 
     while True:
         game = build_game(game_id)
-        game.slack_operator.update_guess_stage_lower()
-        time_left = time.compute_time_left(game.guess_deadline)
-        rpg = users.compute_remaining_potential_guessers(
-            game.potential_guessers, game.guessers)
-        if time_left <= 0 or not rpg:
+        slack.update_guess_stage_lower(game)
+        if game.time_left_to_guess <= 0 \
+                or not game.remaining_potential_guessers:
             game.dict['frozen_guessers'] = deepcopy(game.dict['guessers'])
             game.dict['guess_stage_over'] = True
             game.firestore_editor.set_dict(merge=True)
@@ -277,11 +269,10 @@ def pre_vote_stage(event, context):
     game_id = pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
 
-    if game.exceptions.is_dead():
+    if exceptions.build_game_is_dead_msg(game):
         return make_response('', 200)
     if game.pre_vote_stage_already_triggered:
-        logger.info('aborted cause already triggered, game_id={}'.format(
-            game_id))
+        logger.info(exceptions.build_aborted_cause_already_triggered_msg(game))
         return make_response('', 200)
     else:
         game.dict['pre_vote_stage_already_triggered'] = True
@@ -310,9 +301,10 @@ def pre_vote_stage(event, context):
     ]:
         game.dict[attribute] = game.__dict__[attribute]
     game.firestore_editor.set_dict(merge=True)
-    game.slack_operator.update_vote_stage()
-    game.slack_operator.send_vote_reminders()
-    game.slack_operator.trigger_vote_stage()
+
+    slack.update_vote_stage(game)
+    slack.send_vote_reminders(game)
+    game.stage_triggerer.trigger_vote_stage()
     logger.info('vote_stage triggered, game_id={}'.format(game_id))
     return make_response('', 200)
 
@@ -323,24 +315,22 @@ def vote_stage(event, context):
     game_id = pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
 
-    if game.exceptions.is_dead():
+    if exceptions.game_is_dead(game):
         return make_response('', 200)
     if game.vote_stage_over:
         return make_response('', 200)
-    if game.exceptions.vote_stage_was_recently_trigger():
-        logger.info('aborted cause recently triggered, game_id={}'.format(
-            game_id))
+    if exceptions.vote_stage_was_recently_trigger(game):
+        logger.info(exceptions.build_aborted_cause_recently_triggered_msg(
+            game))
         return make_response('', 200)
     game.dict['vote_stage_last_trigger'] = time.get_now()
     game.firestore_editor.set_dict(merge=True)
 
     while True:
         game = build_game(game_id)
-        game.slack_operator.update_vote_stage_lower()
-        time_left = time.compute_time_left(game.vote_deadline)
-        rpv = users.compute_remaining_potential_voters(
-            game.potential_voters, game.voters)
-        if time_left <= 0 or not rpv:
+        slack.update_vote_stage_lower(game)
+        if game.time_left_to_vote <= 0 or \
+                not game.remaining_potential_voters:
             game.dict['frozen_voters'] = deepcopy(game.dict['voters'])
             game.dict['vote_stage_over'] = True
             game.firestore_editor.set_dict(merge=True)
@@ -363,11 +353,10 @@ def pre_result_stage(event, context):
     game_id = pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
 
-    if game.exceptions.is_dead():
+    if exceptions.build_game_is_dead_msg(game):
         return make_response('', 200)
     if game.pre_result_stage_already_triggered:
-        logger.info('aborted cause already triggered, game_id={}'.format(
-            game_id))
+        logger.info(exceptions.build_aborted_cause_already_triggered_msg(game))
         return make_response('', 200)
     else:
         game.dict['pre_result_stage_already_triggered'] = True
@@ -376,23 +365,18 @@ def pre_result_stage(event, context):
     game.slack_operator.update_pre_result_stage()
 
     game.results = game.results_builder.build_results()
-    game.max_score = results.compute_max_score(game.results)
-    game.winners = results.compute_winners(game.results, game.max_score)
-    game.graph = graph.build_graph(game.results, game.truth_index)
-    graph.draw_graph(
-        game.graph, game.truth_index, game.results, game.winners,
-        game.graph_local_path)
-    game.graph_url = graph.upload_graph_to_gs(
-        game.bucket, game.bucket_dir_name, game.graph_local_path)
-    game.dict['results'] = game.results
-    game.dict['max_score'] = game.max_score
-    game.dict['winners'] = game.winners
-    game.dict['graph_url'] = game.graph_url
+    game.max_score = results.compute_max_score(game)
+    game.winners = results.compute_winners(game)
+    game.graph = graph.build_graph(game)
+    graph.draw_graph(game)
+    game.graph_url = graph.upload_graph_to_gs(game)
+    for attribute in ['results', 'max_score', 'winners', 'graph_url']:
+        game.dict[attribute] = game.__dict__[attribute]
     game.firestore_editor.set_dict(merge=True)
 
-    game.update_result_stage()
-    game.send_is_over_notifications()
-    game.trigger_result_stage()
+    slack.update_result_stage(game)
+    slack.send_is_over_notifications(game)
+    game.stage_triggerer.trigger_result_stage()
     logger.info('result_stage triggered, game_id={}'.format(game_id))
     return make_response('', 200)
 
@@ -402,16 +386,16 @@ def result_stage(event, context):
     game_id = pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
 
-    if game.is_dead():
+    if exceptions.game_is_dead(game):
         return make_response('', 200)
     if game.result_stage_over:
         return make_response('', 200)
 
     game.dict['result_stage_over'] = True
-    game.set_dict(merge=True)
+    game.firestore_editor.set_game_dict(merge=True)
 
     if game.post_clean:
-        game.delete()
+        game.firestore_editor.delete_game()
     logger.info('sucessfully ended, game_id={}'.format(game_id))
     return make_response('', 200)
 
@@ -423,6 +407,6 @@ def erase(event, context):
         games_ref = firestore.get_games_ref(db, t.id)
         for g in games_ref.stream():
             game = build_game(g.id)
-            if game.is_dead():
-                game.delete()
+            if exceptions.game_is_dead(game):
+                game.firestore_editor.delete_game()
                 logger.info('game deleted, game_id={}'.format(g.id))

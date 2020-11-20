@@ -1,8 +1,6 @@
 from slackclient import SlackClient
+from app.version import VERSION
 from app import utils
-
-
-VERSION = 1
 
 
 class Game:
@@ -97,12 +95,28 @@ class Game:
         self.voters = self.dict.get('voters')
         self.winners = self.dict.get('winners')
 
-        self.proposals_browser = utils.proposals.ProposalsBrowser(
-            self.indexed_signed_proposals)
+        if self.guess_deadline is not None:
+            self.time_left_to_guess = utils.time.compute_time_left(
+                self.guess_deadline)
+        if self.vote_deadline is not None:
+            self.time_left_to_vote = utils.time.compute_time_left(
+                self.vote_deadline)
+
+        if self.potential_guessers is not None and self.guessers is not None:
+            self.remaining_potential_guessers = \
+                utils.users.compute_remaining_potential_guessers(
+                    self.potential_guessers, self.guessers)
+        if self.potential_voters is not None and self.voters is not None:
+            self.remaining_potential_voters = \
+                utils.users.compute_remaining_potential_voters(
+                    self.potential_voters, self.voters)
+
         self.stage_triggerer = utils.pubsub.StageTriggerer(
             self.publisher,
             self.project_id,
             self.code)
+        self.proposals_browser = utils.proposals.ProposalsBrowser(
+            self.indexed_signed_proposals)
         self.results_builder = utils.results.ResultsBuilder(
             self.frozen_voters,
             self.truth_index,
