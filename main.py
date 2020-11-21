@@ -1,18 +1,17 @@
 import os
+import logging
+import time
 import pytz
 import json
 import yaml
-import logging
-from time import sleep
 import google.cloud.pubsub_v1
 import google.cloud.firestore
 import google.cloud.storage
+import app.utils as utils
 from copy import deepcopy
 from datetime import datetime
 from flask import make_response
 from app.game import Game
-from app.utils import firestore, ids, pubsub, time, views, users, proposals, \
-    results, graph, slack, exceptions
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
                     level='INFO')

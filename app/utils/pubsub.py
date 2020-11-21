@@ -16,11 +16,11 @@ class PubSub:
 
     def build_topic_path(self, topic_name):
         return build_topic_path(
-            self.publisher, self.project_id, topic_name)
+            self.game.publisher, self.game.project_id, topic_name)
 
     def publish(self, topic_name):
         topic_path = self.build_topic_path(topic_name)
-        self.publisher.publish(topic_path, data=self.game_code)
+        self.game.publisher.publish(topic_path, data=self.game.code)
 
     def trigger_pre_guess_stage(self):
         self.publish('topic_pre_guess_stage')

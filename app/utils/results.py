@@ -1,7 +1,8 @@
 import app.utils as utils
 
 
-class Results:
+class ResultsBuilder:
+
     def __init__(self, game):
         self.game = game
 

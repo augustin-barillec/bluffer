@@ -2,24 +2,18 @@ import random
 from app import utils
 
 
-class ProposalsBuilder:
-
-    def __init__(self, game):
-        self.game = game
-
-    def build_indexed_signed_proposals(self):
-        sorted_frozen_guessers = utils.users.sort_users(
-            self.game.frozen_guessers)
-        res = [(k, self.game.frozen_guessers[k][1])
-               for k in sorted_frozen_guessers]
-        res.append(('Truth', self.game.truth))
-        random.seed(self.game.id)
-        random.shuffle(res)
-        res = [(index, author, proposal)
-               for index, (author, proposal) in enumerate(res, 1)]
-        res = [{'index': index, 'author': author, 'proposal': proposal}
-               for index, author, proposal in res]
-        return res
+def build_indexed_signed_proposals(game):
+    sorted_frozen_guessers = utils.users.sort_users(game.frozen_guessers)
+    res = [(k, game.frozen_guessers[k][1])
+           for k in sorted_frozen_guessers]
+    res.append(('Truth', game.truth))
+    random.seed(game.id)
+    random.shuffle(res)
+    res = [(index, author, proposal)
+           for index, (author, proposal) in enumerate(res, 1)]
+    res = [{'index': index, 'author': author, 'proposal': proposal}
+           for index, author, proposal in res]
+    return res
 
 
 class ProposalsBrowser:

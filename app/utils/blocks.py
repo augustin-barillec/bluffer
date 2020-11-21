@@ -47,10 +47,11 @@ def build_timer_block(time_left, kind):
     return build_text_block(msg)
 
 
-class Blocks:
+class BlockBuilder:
 
     def __init__(self, game):
         self.game = game
+        self.id_builder = utils.ids.IdBuilder(game.secret_prefix, game.id)
 
     def build_guess_timer_block(self):
         return build_timer_block(self.game.time_left_to_guess, 'guess')
@@ -79,13 +80,11 @@ class Blocks:
         return build_text_block('Computing results :drum_with_drumsticks:')
 
     def build_guess_button_block(self):
-        id_builder = utils.ids.IdBuilder(self.game.secret_prefix, self.game.id)
-        id_ = id_builder.build_guess_button_block_id()
+        id_ = self.id_builder.build_guess_button_block_id()
         return build_button_block('Your guess', id_)
 
     def build_vote_button_block(self):
-        id_builder = utils.ids.IdBuilder(self.game.secret_prefix, self.game.id)
-        id_ = id_builder.build_vote_button_block_id()
+        id_ = self.id_builder.build_vote_button_block_id()
         return build_button_block('Your vote', id_)
 
     @staticmethod
@@ -114,7 +113,7 @@ class Blocks:
     def build_indexed_anonymous_proposals_block(self):
         msg = ['Proposals:']
         indexed_anonymous_proposals = \
-            utils.proposals.Proposals(
+            utils.proposals.ProposalsBrowser(
                 self.game).build_indexed_anonymous_proposals()
         for iap in indexed_anonymous_proposals:
             index = iap['index']
@@ -124,7 +123,7 @@ class Blocks:
         return build_text_block(msg)
 
     def build_own_guess_block(self, voter):
-        index, guess = utils.proposals.Proposals(
+        index, guess = utils.proposals.ProposalsBrowser(
             self.game).build_own_indexed_guess(voter)
         msg = 'Your guess: {}) {}'.format(index, guess)
         return build_text_block(msg)

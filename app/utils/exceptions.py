@@ -66,7 +66,6 @@ class Exceptions:
         delta = utils.time.datetime1_minus_datetime2(now, last_trigger)
         return delta < 30
 
-    @staticmethod
     def guess_stage_was_recently_trigger(self):
         return self.stage_was_recently_trigger(
             self.game.guess_stage_last_trigger)

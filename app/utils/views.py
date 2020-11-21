@@ -66,10 +66,11 @@ def collect_vote(vote_view):
 
 
 class ViewBuilder:
-    def __init__(self, question, id_builder, proposals_browser):
-        self.question = question
-        self.id_builder = id_builder
-        self.proposals_browser = proposals_browser
+    def __init__(self, game):
+        self.game = game
+        self.id_builder = utils.ids.IdBuilder(game.secret_prefix, game.id)
+        self.proposals_browser = utils.proposals.ProposalsBrowser(game)
+        self.block_builder = utils.blocks.BlockBuilder(game)
 
     def build_setup_view(self):
         id_ = self.id_builder.build_setup_view_id()
@@ -77,7 +78,7 @@ class ViewBuilder:
 
     def build_guess_view(self):
         id_ = self.id_builder.build_guess_view_id()
-        return build_guess_view(id_, self.question)
+        return build_guess_view(id_, self.game.question)
 
     def build_vote_view(self, voter):
         res = deepcopy(vote_view_template)
@@ -99,7 +100,7 @@ class ViewBuilder:
         input_block = input_block_template
         input_block['element']['options'] = vote_options
         res['blocks'] = [
-            utils.blocks.build_own_guess_block(self.proposals_browser, voter),
+            self.block_builder.build_own_guess_block(voter),
             utils.blocks.build_text_block(votable_proposals_msg),
             input_block]
         return res
