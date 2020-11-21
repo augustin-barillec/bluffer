@@ -61,5 +61,3 @@ class FirestoreEditor:
 
     def delete_game(self):
         self.game_ref.delete()
-
-

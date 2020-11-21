@@ -47,237 +47,227 @@ def build_timer_block(time_left, kind):
     return build_text_block(msg)
 
 
-def build_guess_timer_block(game):
-    return build_timer_block(game.time_left_to_guess, 'guess')
+class Blocks:
 
+    def __init__(self, game):
+        self.game = game
 
-def build_vote_timer_block(game):
-    return build_timer_block(game.time_left_to_vote, 'vote')
+    def build_guess_timer_block(self):
+        return build_timer_block(self.game.time_left_to_guess, 'guess')
 
+    def build_vote_timer_block(self):
+        return build_timer_block(self.game.time_left_to_vote, 'vote')
 
-def build_title_block(game):
-    msg = 'Game set up by {}!'.format(
-        utils.users.user_display(game.organizer_id))
-    return build_text_block(msg)
+    def build_title_block(self):
+        msg = 'Game set up by {}!'.format(
+            utils.users.user_display(self.game.organizer_id))
+        return build_text_block(msg)
 
+    def build_question_block(self):
+        return build_text_block(self.game.question)
 
-def build_question_block(game):
-    return build_text_block(game.question)
+    @staticmethod
+    def build_preparing_guess_stage_block():
+        return build_text_block('Preparing guess stage...')
 
+    @staticmethod
+    def build_preparing_vote_stage_block():
+        return build_text_block('Preparing vote stage...')
 
-def build_preparing_guess_stage_block():
-    return build_text_block('Preparing guess stage...')
+    @staticmethod
+    def build_computing_results_stage_block():
+        return build_text_block('Computing results :drum_with_drumsticks:')
 
+    def build_guess_button_block(self):
+        id_builder = utils.ids.IdBuilder(self.game.secret_prefix, self.game.id)
+        id_ = id_builder.build_guess_button_block_id()
+        return build_button_block('Your guess', id_)
 
-def build_preparing_vote_stage_block():
-    return build_text_block('Preparing vote stage...')
+    def build_vote_button_block(self):
+        id_builder = utils.ids.IdBuilder(self.game.secret_prefix, self.game.id)
+        id_ = id_builder.build_vote_button_block_id()
+        return build_button_block('Your vote', id_)
 
+    @staticmethod
+    def build_users_blocks(users, kind, no_users_msg):
+        msg = utils.users.build_users_msg(users, kind, no_users_msg)
+        return build_text_block(msg)
 
-def build_computing_results_stage_block():
-    return build_text_block('Computing results :drum_with_drumsticks:')
+    def build_remaining_potential_voters_block(self):
+        kind = 'Potential voters'
+        no_users_msg = 'Everyone has voted!'
+        return self.build_users_blocks(
+            self.game.remaining_potential_voters, kind, no_users_msg)
 
+    def build_guessers_block(self):
+        users = self.game.guessers
+        kind = 'Guessers'
+        no_users_msg = 'No one has guessed yet.'
+        return self.build_users_blocks(users, kind, no_users_msg)
 
-def build_guess_button_block(game):
-    id_ = game.id_builder.build_guess_button_block_id()
-    return build_button_block('Your guess', id_)
+    def build_voters_block(self):
+        users = self.game.voters
+        kind = 'Voters'
+        no_users_msg = 'No one has voted yet.'
+        return self.build_users_blocks(users, kind, no_users_msg)
 
+    def build_indexed_anonymous_proposals_block(self):
+        msg = ['Proposals:']
+        indexed_anonymous_proposals = \
+            utils.proposals.Proposals(
+                self.game).build_indexed_anonymous_proposals()
+        for iap in indexed_anonymous_proposals:
+            index = iap['index']
+            proposal = iap['proposal']
+            msg.append('{}) {}'.format(index, proposal))
+        msg = '\n'.join(msg)
+        return build_text_block(msg)
 
-def build_vote_button_block(game):
-    id_ = game.id_builder.build_vote_button_block_id()
-    return build_button_block('Your vote', id_)
+    def build_own_guess_block(self, voter):
+        index, guess = utils.proposals.Proposals(
+            self.game).build_own_indexed_guess(voter)
+        msg = 'Your guess: {}) {}'.format(index, guess)
+        return build_text_block(msg)
 
+    def build_indexed_signed_guesses_msg(self):
+        msg = []
+        for r in deepcopy(self.game.results):
+            player = utils.users.user_display(r['guesser'])
+            index = r['index']
+            guess = r['guess']
+            r_msg = '• {}: {}) {}'.format(player, index, guess)
+            msg.append(r_msg)
+        msg = '\n'.join(msg)
+        return msg
 
-def build_users_blocks(users, kind, no_users_msg):
-    msg = utils.users.build_users_msg(users, kind, no_users_msg)
-    return build_text_block(msg)
+    def build_conclusion_msg(self):
+        lg = len(self.game.frozen_guessers)
+        lv = len(self.game.frozen_voters)
+        if lg == 0:
+            return 'No one played this game :sob:.'
+        if lg == 1:
+            g = utils.users.user_display(list(self.game.frozen_guessers)[0])
+            return 'Thanks for your guess, {}!'.format(g)
+        if lv == 0:
+            return 'No one voted :sob:.'
+        if lv == 1:
+            r = self.game.results[0]
+            g = utils.users.user_display(r['guesser'])
+            ca = r['chosen_author']
+            if ca == 'Truth':
+                return 'Bravo {}! You found the truth! :v:'.format(g)
+            else:
+                return 'Hey {}, at least you voted! :grimacing:'.format(g)
+        if self.game.max_score == 0:
+            return 'Zero points scored!'
+        lw = len(self.game.winners)
+        if lw == lv:
+            return "Well, it's a draw! :scales:"
+        if lw == 1:
+            w = utils.users.user_display(self.game.winners[0])
+            return 'And the winner is {}! :first_place_medal:'.format(w)
+        if lw > 1:
+            ws = [utils.users.user_display(w) for w in self.game.winners]
+            msg_aux = ','.join(ws[:-1])
+            msg_aux += ' and {}'.format(ws[-1])
+            return 'And the winners are {}! :clap:'.format(msg_aux)
 
-
-def build_remaining_potential_voters_block(game):
-    kind = 'Potential voters'
-    no_users_msg = 'Everyone has voted!'
-    return build_users_blocks(
-        game.remaining_potential_voters, kind, no_users_msg)
-
-
-def build_guessers_block(game):
-    users = game.guessers
-    kind = 'Guessers'
-    no_users_msg = 'No one has guessed yet.'
-    return build_users_blocks(users, kind, no_users_msg)
-
-
-def build_voters_block(game):
-    users = game.voters
-    kind = 'Voters'
-    no_users_msg = 'No one has voted yet.'
-    return build_users_blocks(users, kind, no_users_msg)
-
-
-def build_indexed_anonymous_proposals_block(game):
-    msg = ['Proposals:']
-    indexed_anonymous_proposals = \
-        game.proposals_browser.build_indexed_anonymous_proposals()
-    for iap in indexed_anonymous_proposals:
-        index = iap['index']
-        proposal = iap['proposal']
-        msg.append('{}) {}'.format(index, proposal))
-    msg = '\n'.join(msg)
-    return build_text_block(msg)
-
-
-def build_own_guess_block(game):
-    index, guess = game.proposals_browser.build_own_indexed_guess(game.voter)
-    msg = 'Your guess: {}) {}'.format(index, guess)
-    return build_text_block(msg)
-
-
-def build_indexed_signed_guesses_msg(game):
-    msg = []
-    for r in deepcopy(game.results):
-        player = utils.users.user_display(r['guesser'])
-        index = r['index']
-        guess = r['guess']
-        r_msg = '• {}: {}) {}'.format(player, index, guess)
-        msg.append(r_msg)
-    msg = '\n'.join(msg)
-    return msg
-
-
-def build_conclusion_msg(game):
-    lg = len(game.frozen_guessers)
-    lv = len(game.frozen_voters)
-    if lg == 0:
-        return 'No one played this game :sob:.'
-    if lg == 1:
-        g = utils.users.user_display(list(game.frozen_guessers)[0])
-        return 'Thanks for your guess, {}!'.format(g)
-    if lv == 0:
-        return 'No one voted :sob:.'
-    if lv == 1:
-        r = game.results[0]
-        g = utils.users.user_display(r['guesser'])
-        ca = r['chosen_author']
-        if ca == 'Truth':
-            return 'Bravo {}! You found the truth! :v:'.format(g)
+    def build_truth_block(self):
+        msg = '• Truth: '
+        if len(self.game.frozen_guessers) == 0:
+            msg += '{}'.format(self.game.truth)
         else:
-            return 'Hey {}, at least you voted! :grimacing:'.format(g)
-    if game.max_score == 0:
-        return 'Zero points scored!'
-    lw = len(game.winners)
-    if lw == lv:
-        return "Well, it's a draw! :scales:"
-    if lw == 1:
-        w = utils.users.user_display(game.winners[0])
-        return 'And the winner is {}! :first_place_medal:'.format(w)
-    if lw > 1:
-        ws = [utils.users.user_display(w) for w in game.winners]
-        msg_aux = ','.join(ws[:-1])
-        msg_aux += ' and {}'.format(ws[-1])
-        return 'And the winners are {}! :clap:'.format(msg_aux)
+            index = self.game.truth_index
+            msg += '{}) {}'.format(index, self.game.truth)
+        return build_text_block(msg)
 
+    def build_indexed_signed_guesses_block(self):
+        msg = self.build_indexed_signed_guesses_msg()
+        return build_text_block(msg)
 
-def build_truth_block(game):
-    msg = '• Truth: '
-    if len(game.frozen_guessers) == 0:
-        msg += '{}'.format(game.truth)
-    else:
-        index = game.truth_index
-        msg += '{}) {}'.format(index, game.truth)
-    return build_text_block(msg)
+    def build_graph_block(self):
+        return build_image_block(
+            url=self.game.graph_url, alt_text='Voting graph')
 
+    def build_conclusion_block(self):
+        msg = self.build_conclusion_msg()
+        return build_text_block(msg)
 
-def build_indexed_signed_guesses_block(game):
-    msg = build_indexed_signed_guesses_msg(game)
-    return build_text_block(msg)
+    def build_pre_guess_stage_upper_blocks(self):
+        title_block = self.build_title_block()
+        preparing_guess_stage_block = self.build_preparing_guess_stage_block()
+        return u([title_block, preparing_guess_stage_block])
 
+    @staticmethod
+    def build_pre_guess_stage_lower_blocks():
+        return d([])
 
-def build_graph_block(game):
-    return build_image_block(url=game.graph_url, alt_text='Voting graph')
+    def build_pre_vote_stage_upper_blocks(self):
+        title_block = self.build_title_block()
+        question_block = self.build_question_block()
+        preparing_vote_stage_block = self.build_preparing_vote_stage_block()
+        return u([title_block, question_block, preparing_vote_stage_block])
 
+    @staticmethod
+    def build_pre_vote_stage_lower_blocks():
+        return d([])
 
-def build_conclusion_block(game):
-    msg = build_conclusion_msg(game)
-    return build_text_block(msg)
+    def build_pre_result_stage_upper_blocks(self):
+        title_block = self.build_title_block()
+        question_block = self.build_question_block()
+        computing_results_stage_block = \
+            self.build_computing_results_stage_block()
+        return u([title_block, question_block, computing_results_stage_block])
 
+    @staticmethod
+    def build_pre_result_stage_lower_blocks():
+        return d([])
 
-def build_pre_guess_stage_upper_blocks(game):
-    title_block = build_title_block(game)
-    preparing_guess_stage_block = build_preparing_guess_stage_block()
-    return u([title_block, preparing_guess_stage_block])
+    def build_guess_stage_upper_blocks(self):
+        title_block = self.build_title_block()
+        question_block = self.build_question_block()
+        guess_button_block = self.build_guess_button_block()
+        return u([title_block, question_block, guess_button_block])
 
+    def build_guess_stage_lower_blocks(self):
+        guess_timer_block = self.build_guess_timer_block()
+        guessers_block = self.build_guessers_block()
+        return d([guess_timer_block, guessers_block])
 
-def build_pre_guess_stage_lower_blocks():
-    return d([])
+    def build_vote_stage_upper_blocks(self):
+        title_block = self.build_title_block()
+        question_block = self.build_question_block()
+        anonymous_proposals_block = \
+            self.build_indexed_anonymous_proposals_block()
+        vote_button_block = self.build_vote_button_block()
+        return u([title_block, question_block,
+                  anonymous_proposals_block, vote_button_block])
 
+    def build_vote_stage_lower_blocks(self):
+        vote_timer_block = self.build_vote_timer_block()
+        remaining_potential_voters_block = \
+            self.build_remaining_potential_voters_block()
+        voters_block = self.build_voters_block()
+        return d([vote_timer_block, remaining_potential_voters_block,
+                  voters_block])
 
-def build_pre_vote_stage_upper_blocks(game):
-    title_block = build_title_block(game)
-    question_block = build_question_block(game)
-    preparing_vote_stage_block = build_preparing_vote_stage_block()
-    return u([title_block, question_block, preparing_vote_stage_block])
+    def build_result_stage_upper_blocks(self):
+        title_block = self.build_title_block()
+        question_block = self.build_question_block()
+        truth_block = self.build_truth_block()
+        indexed_signed_guesses_block = \
+            self.build_indexed_signed_guesses_block()
+        conclusion_block = self.build_conclusion_block()
+        res = [title_block, question_block, truth_block,
+               indexed_signed_guesses_block]
+        if len(self.game.frozen_guessers) > 1 and \
+                len(self.game.frozen_voters) > 0:
+            graph_block = self.build_graph_block()
+            res.append(graph_block)
+        res.append(conclusion_block)
+        res = u(res)
+        return res
 
-
-def build_pre_vote_stage_lower_blocks():
-    return d([])
-
-
-def build_pre_result_stage_upper_blocks(game):
-    title_block = build_title_block(game)
-    question_block = build_question_block(game)
-    computing_results_stage_block = build_computing_results_stage_block()
-    return u([title_block, question_block, computing_results_stage_block])
-
-
-def build_pre_result_stage_lower_blocks():
-    return d([])
-
-
-def build_guess_stage_upper_blocks(game):
-    title_block = build_title_block(game)
-    question_block = build_question_block(game)
-    guess_button_block = build_guess_button_block(game)
-    return u([title_block, question_block, guess_button_block])
-
-
-def build_guess_stage_lower_blocks(game):
-    guess_timer_block = build_guess_timer_block(game)
-    guessers_block = build_guessers_block(game)
-    return d([guess_timer_block, guessers_block])
-
-
-def build_vote_stage_upper_blocks(game):
-    title_block = build_title_block(game)
-    question_block = build_question_block(game)
-    anonymous_proposals_block = build_indexed_anonymous_proposals_block(game)
-    vote_button_block = build_vote_button_block(game)
-    return u([title_block, question_block,
-              anonymous_proposals_block, vote_button_block])
-
-
-def build_vote_stage_lower_blocks(game):
-    vote_timer_block = build_vote_timer_block(game)
-    remaining_potential_voters_block = \
-        build_remaining_potential_voters_block(game)
-    voters_block = build_voters_block(game)
-    return d([vote_timer_block, remaining_potential_voters_block,
-              voters_block])
-
-
-def build_result_stage_upper_blocks(game):
-    title_block = build_title_block(game)
-    question_block = build_question_block(game)
-    truth_block = build_truth_block(game)
-    indexed_signed_guesses_block = build_indexed_signed_guesses_block(game)
-    conclusion_block = build_conclusion_block(game)
-    res = [title_block, question_block, truth_block,
-           indexed_signed_guesses_block]
-    if len(game) > 1 and len(game) > 0:
-        graph_block = build_graph_block(game)
-        res.append(graph_block)
-    res.append(conclusion_block)
-    res = u(res)
-    return res
-
-
-def build_result_stage_lower_blocks():
-    return d([])
+    @staticmethod
+    def build_result_stage_lower_blocks():
+        return d([])

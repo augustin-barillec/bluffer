@@ -3,52 +3,56 @@ import matplotlib.pyplot as plt
 from app.utils import storage
 
 
-def build_graph(game):
-    res = nx.DiGraph()
-    res.add_node(game.truth_index)
-    for r in game.results:
-        res.add_node(r['index'])
-        if 'vote_index' in r:
-            res.add_edge(r['index'], r['vote_index'])
-    return res
+class Graph:
 
+    def __init__(self, game):
+        self.game = game
 
-def draw_graph(game):
-    g = game.graph
+    def build_graph(self):
+        res = nx.DiGraph()
+        res.add_node(self.game.truth_index)
+        for r in self.game.results:
+            res.add_node(r['index'])
+            if 'vote_index' in r:
+                res.add_edge(r['index'], r['vote_index'])
+        return res
 
-    side_length = int(len(game.results) / 2) + 7
+    def draw_graph(self):
+        g = self.game.graph
 
-    plt.figure(figsize=(side_length, side_length))
+        side_length = int(len(self.game.results) / 2) + 7
 
-    plt.title('Voting graph')
-    pos = nx.circular_layout(g)
+        plt.figure(figsize=(side_length, side_length))
 
-    nx.draw_networkx_nodes(g, pos, node_color='#cc66ff', alpha=0.3,
-                           node_size=1000)
+        plt.title('Voting graph')
+        pos = nx.circular_layout(g)
 
-    nx.draw_networkx_edges(g, pos, alpha=1.0, arrows=True, width=1.0)
+        nx.draw_networkx_nodes(g, pos, node_color='#cc66ff', alpha=0.3,
+                               node_size=1000)
 
-    truth_label = {game.truth_index: 'Truth'}
-    nx.draw_networkx_labels(g, pos, labels=truth_label, font_color='r')
+        nx.draw_networkx_edges(g, pos, alpha=1.0, arrows=True, width=1.0)
 
-    guesser_labels = {r['index']: '{}\n{}'.format(r['guesser_name'],
-                                                  r['score'])
-                      for r in game.results}
+        truth_label = {self.game.truth_index: 'Truth'}
+        nx.draw_networkx_labels(g, pos, labels=truth_label, font_color='r')
 
-    indexes_of_winners = set(r['index'] for r in game.results
-                             if r['guesser'] in game.winners)
-    indexes_of_losers = set(r['index'] for r in game.results
-                            if r['guesser'] not in game.winners)
+        guesser_labels = {r['index']: '{}\n{}'.format(r['guesser_name'],
+                                                      r['score'])
+                          for r in self.game.results}
 
-    winner_labels = {k: guesser_labels[k] for k in indexes_of_winners}
-    loser_labels = {k: guesser_labels[k] for k in indexes_of_losers}
+        indexes_of_winners = set(r['index'] for r in self.game.results
+                                 if r['guesser'] in self.game.winners)
+        indexes_of_losers = set(r['index'] for r in self.game.results
+                                if r['guesser'] not in self.game.winners)
 
-    nx.draw_networkx_labels(g, pos, labels=loser_labels, font_color='b')
-    nx.draw_networkx_labels(g, pos, labels=winner_labels, font_color='g')
+        winner_labels = {k: guesser_labels[k] for k in indexes_of_winners}
+        loser_labels = {k: guesser_labels[k] for k in indexes_of_losers}
 
-    plt.savefig(game.graph_local_path)
+        nx.draw_networkx_labels(g, pos, labels=loser_labels, font_color='b')
+        nx.draw_networkx_labels(g, pos, labels=winner_labels, font_color='g')
 
+        plt.savefig(self.game.graph_local_path)
 
-def upload_graph_to_gs(game):
-    return storage.upload_to_gs(
-        game.bucket, game.bucket_dir_name, game.graph_local_path)
+    def upload_graph_to_gs(self):
+        return storage.upload_to_gs(
+            self.game.bucket, self.game.bucket_dir_name,
+            self.game.graph_local_path)

@@ -9,11 +9,10 @@ def event_data_to_game_id(event_data):
     return base64.b64decode(event_data).decode('utf-8')
 
 
-class StageTriggerer:
-    def __init__(self, publisher, project_id, game_code):
-        self.publisher = publisher
-        self.project_id = project_id
-        self.game_code = game_code
+class PubSub:
+
+    def __init__(self, game):
+        self.game = game
 
     def build_topic_path(self, topic_name):
         return build_topic_path(

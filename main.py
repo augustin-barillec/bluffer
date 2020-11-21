@@ -81,6 +81,7 @@ def message_actions(request):
         view_callback_id = view['callback_id']
         if not view_callback_id.startswith(secret_prefix):
             return make_response('', 200)
+
         game_id = ids.slack_object_id_to_game_id(view_callback_id)
         game = build_game(game_id)
 

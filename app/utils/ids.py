@@ -45,6 +45,7 @@ def game_id_to_organizer_id(game_id):
 
 
 class IdBuilder:
+
     def __init__(self, secret_prefix, game_id):
         self.secret_prefix = secret_prefix
         self.game_id = game_id

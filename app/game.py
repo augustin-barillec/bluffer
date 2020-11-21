@@ -110,26 +110,3 @@ class Game:
             self.remaining_potential_voters = \
                 utils.users.compute_remaining_potential_voters(
                     self.potential_voters, self.voters)
-
-        self.stage_triggerer = utils.pubsub.StageTriggerer(
-            self.publisher,
-            self.project_id,
-            self.code)
-        self.proposals_browser = utils.proposals.ProposalsBrowser(
-            self.indexed_signed_proposals)
-        self.results_builder = utils.results.ResultsBuilder(
-            self.frozen_voters,
-            self.truth_index,
-            self.potential_guessers,
-            self.proposals_browser)
-        self.view_builder = utils.views.ViewBuilder(
-            self.question,
-            self.id_builder,
-            self.proposals_browser)
-        self.slack_operator = utils.slack.SlackOperator(
-            self.slack_client,
-            self.channel_id,
-            self.organizer_id,
-            self.upper_ts,
-            self.lower_ts,
-            self.view_builder)
