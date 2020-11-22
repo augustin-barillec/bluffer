@@ -9,18 +9,20 @@ def event_data_to_game_id(event_data):
     return base64.b64decode(event_data).decode('utf-8')
 
 
-class Triggerer:
+class StageTriggerer:
 
-    def __init__(self, game):
-        self.game = game
+    def __init__(self, publisher, project_id, game_code):
+        self.publisher = publisher
+        self.project_id = project_id
+        self.game_code = game_code
 
     def build_topic_path(self, topic_name):
         return build_topic_path(
-            self.game.publisher, self.game.project_id, topic_name)
+            self.publisher, self.project_id, topic_name)
 
     def publish(self, topic_name):
         topic_path = self.build_topic_path(topic_name)
-        self.game.publisher.publish(topic_path, data=self.game.code)
+        self.publisher.publish(topic_path, data=self.game_code)
 
     def trigger_pre_guess_stage(self):
         self.publish('topic_pre_guess_stage')

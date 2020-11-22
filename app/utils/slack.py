@@ -1,4 +1,4 @@
-from app import utils
+import app.utils as utils
 
 
 def get_channel_members(slack_client, channel_id):

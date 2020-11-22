@@ -1,6 +1,6 @@
+import app.utils as utils
 from slackclient import SlackClient
 from app.version import VERSION
-from app import utils
 
 
 class Game:
@@ -31,6 +31,9 @@ class Game:
         self.team_id = self.id_builder.get_team_id()
         self.channel_id = self.id_builder.get_channel_id()
         self.organizer_id = self.id_builder.get_organizer_id()
+
+        self.stage_triggerer = utils.pubsub.StageTriggerer(
+            self.publisher, self.project_id, self.code)
 
         self.bucket_dir_name = self.team_id
         self.graph_basename = '{}_graph.png'.format(self.id)

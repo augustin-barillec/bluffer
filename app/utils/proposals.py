@@ -1,5 +1,5 @@
 import random
-from app import utils
+import app.utils as utils
 
 
 def build_indexed_signed_proposals(game):

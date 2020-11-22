@@ -1,6 +1,6 @@
 import networkx as nx
 import matplotlib.pyplot as plt
-from app.utils import storage
+import app.utils as utils
 
 
 def build_graph(game):
@@ -50,5 +50,5 @@ def draw_graph(game):
 
 
 def upload_graph_to_gs(game):
-    return storage.upload_to_gs(
+    return utils.storage.upload_to_gs(
         game.bucket, game.bucket_dir_name, game.graph_local_path)

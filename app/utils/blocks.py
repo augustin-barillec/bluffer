@@ -1,4 +1,4 @@
-from app import utils
+import app.utils as utils
 from copy import deepcopy
 
 

@@ -1,5 +1,5 @@
+import app.utils as utils
 from app.version import VERSION
-from app import utils
 
 
 class Exceptions:
