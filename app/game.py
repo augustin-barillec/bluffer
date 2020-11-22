@@ -55,9 +55,6 @@ class Game:
             self.exists = False
             return
 
-        self.firestore_editor = utils.firestore.FirestoreEditor(
-            self.ref, self.dict)
-
         self.frozen_guessers = self.dict.get('frozen_guessers')
         self.frozen_voters = self.dict.get('frozen_voters')
         self.guess_deadline = self.dict.get('guess_deadline')

@@ -9,7 +9,7 @@ def event_data_to_game_id(event_data):
     return base64.b64decode(event_data).decode('utf-8')
 
 
-class PubSub:
+class Triggerer:
 
     def __init__(self, game):
         self.game = game

@@ -7,7 +7,7 @@ import yaml
 import google.cloud.pubsub_v1
 import google.cloud.firestore
 import google.cloud.storage
-import app.utils as utils
+import app.utils as ut
 from copy import deepcopy
 from datetime import datetime
 from flask import make_response
@@ -48,22 +48,22 @@ def slash_command(request):
     organizer_id = request.form['user_id']
     trigger_id = request.form['trigger_id']
 
-    slash_command_compact = time.datetime_to_compact(
-        time.get_now())
-    game_id = ids.build_game_id(
+    slash_command_compact = ut.time.datetime_to_compact(ut.time.get_now())
+    game_id = ut.ids.build_game_id(
         slash_command_compact, team_id, channel_id, organizer_id, trigger_id)
     logger.info('game_id built, game_id={}'.format(game_id))
     game = build_game(game_id)
 
     game_dicts = game.firestore_reader.get_game_dicts()
     app_conversations = game.firestore_reader.get_app_conversations()
-    exception_msg = exceptions.build_slash_command_exception_msg(
-        game, game_dicts, app_conversations)
+    exception_msg = ut.exceptions.Exceptions(game).\
+        build_slash_command_exception_msg(game_dicts, app_conversations)
     if exception_msg:
-        game.slack_operator.open_exception_view(trigger_id, exception_msg)
+        ut.slack.SlackOperator(game).open_exception_view(
+            trigger_id, exception_msg)
         return make_response('', 200)
 
-    game.slack_operator.open_setup_view(trigger_id)
+    ut.slack.SlackOperator(game).open_setup_view(trigger_id)
     logger.info('setup_view opened, game_id={}'.format(game_id))
     return make_response('', 200)
 
@@ -81,24 +81,24 @@ def message_actions(request):
         if not view_callback_id.startswith(secret_prefix):
             return make_response('', 200)
 
-        game_id = ids.slack_object_id_to_game_id(view_callback_id)
+        game_id = ut.ids.slack_object_id_to_game_id(view_callback_id)
         game = build_game(game_id)
 
         if view_callback_id.startswith(secret_prefix + '#game_setup_view'):
-            question, truth, time_to_guess = views.collect_game_setup(
+            question, truth, time_to_guess = ut.views.collect_game_setup(
                 view)
-            game.setup_submission = time.get_now()
+            game.setup_submission = ut.time.get_now()
             game.question = question
             game.truth = truth
             game.time_to_guess = time_to_guess
-            game.max_life_span = time.build_max_life_span(
+            game.max_life_span = ut.time.build_max_life_span(
                 game.time_to_guess, game.time_to_vote)
 
             game_dicts = game.firestore_reader.get_game_dicts()
-            exception_msg = exceptions.build_setup_view_exception_msg(
-                game, game_dicts)
+            exception_msg = ut.exceptions.Exceptions(game).\
+                build_setup_view_exception_msg(game_dicts)
             if exception_msg:
-                return views.build_exception_view_response(exception_msg)
+                return ut.views.build_exception_view_response(exception_msg)
 
             game.dict = {
                 'version': game.version,
@@ -107,26 +107,27 @@ def message_actions(request):
                 'truth': game.truth,
                 'time_to_guess': game.time_to_guess,
                 'max_life_span': game.max_life_span}
-            game.firestore_editor.set_dict()
-            game.stage_triggerer.trigger_pre_guess_stage()
+            ut.firestore.FirestoreEditor(game).set_game_dict()
+            ut.pubsub.Triggerer(game).trigger_pre_guess_stage()
             logger.info('pre_guess_stage triggered, game_id={}'.format(
                 game_id))
             return make_response('', 200)
 
-        exception_msg = exceptions.build_game_is_dead_msg(game)
+        exception_msg = ut.exceptions.Exceptions(game).\
+            build_game_is_dead_msg()
         if exception_msg:
-            return views.build_exception_view_response(exception_msg)
+            return ut.views.build_exception_view_response(exception_msg)
 
         if view_callback_id.startswith(secret_prefix + '#guess_view'):
-            guess = views.collect_guess(view)
-            exception_msg = exceptions.build_guess_view_exception_msg(
-                guess, game)
+            guess = ut.views.collect_guess(view)
+            exception_msg = ut.exceptions.Exceptions(game).\
+                build_guess_view_exception_msg(guess)
             if exception_msg:
-                return views.build_exception_view_response(exception_msg)
-            guess_start = time.get_now()
+                return ut.views.build_exception_view_response(exception_msg)
+            guess_start = ut.time.get_now()
             game.dict['guessers'][user_id] = [guess_start, guess]
-            game.firestore_editor.set_dict(merge=True)
-            slack.update_guess_stage_lower(game)
+            ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
+            ut.slack.update_guess_stage_lower(game)
             logger.info('guess recorded, guesser_id={}, game_id={}'.format(
                 game_id, user_id))
             return make_response('', 200)
