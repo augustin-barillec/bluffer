@@ -13,8 +13,8 @@ from datetime import datetime
 from flask import make_response
 from app.game import Game
 
-logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s',
-                    level='INFO')
+logging.basicConfig(
+    format='%(asctime)s - %(levelname)s - %(message)s', level='INFO')
 logger = logging.getLogger()
 
 dir_path = os.path.realpath(os.path.dirname(__file__))
@@ -163,8 +163,7 @@ def message_actions(request):
             exception_msg = exceptions.build_guess_button_exception_msg(
                 user_id)
             if exception_msg:
-                ut.slack.SlackOperator(game).open_exception_view(
-                    trigger_id, exception_msg)
+                slack_operator.open_exception_view(trigger_id, exception_msg)
                 return make_response('', 200)
             slack_operator.open_guess_view(trigger_id)
             logger.info('guess_view opened, user_id={}, game_id={}'.format(
@@ -174,8 +173,7 @@ def message_actions(request):
         if action_block_id.startswith(secret_prefix + '#vote_button_block'):
             exception_msg = exceptions.build_vote_button_exception_msg(user_id)
             if exception_msg:
-                ut.slack.SlackOperator(game).open_exception_view(
-                    trigger_id, exception_msg)
+                slack_operator.open_exception_view(trigger_id, exception_msg)
                 return make_response('', 200)
             slack_operator.open_vote_view(trigger_id, user_id)
             logger.info('vote_view opened, user_id={}, game_id={}'.format(
@@ -198,10 +196,9 @@ def pre_guess_stage(event, context):
         game.dict['pre_guess_stage_already_triggered'] = True
         ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
 
-    game.upper_ts, game.lower_ts = \
-        ut.slack.SlackOperator(game).post_pre_guess_stage()
-    game.potential_guessers = \
-        ut.slack.SlackOperator(game).get_potential_guessers()
+    slack_operator = ut.slack.SlackOperator(game)
+    game.upper_ts, game.lower_ts = slack_operator.post_pre_guess_stage()
+    game.potential_guessers = slack_operator.get_potential_guessers()
     game.guessers = dict()
     game.guess_start = ut.time.get_now()
     game.guess_deadline = ut.time.compute_deadline(
@@ -307,7 +304,7 @@ def pre_vote_stage(event, context):
 
     slack_operator = ut.slack.SlackOperator(game)
     slack_operator.update_vote_stage()
-    ut.slack.SlackOperator(game).send_vote_reminders()
+    slack_operator.send_vote_reminders()
     game.stage_triggerer.trigger_vote_stage()
     logger.info('vote_stage triggered, game_id={}'.format(game_id))
     return make_response('', 200)
