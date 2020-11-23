@@ -1,4 +1,5 @@
 import app.utils as utils
+from flask import make_response
 from app.version import VERSION
 
 
@@ -160,3 +161,13 @@ class Exceptions:
             return 'Only guessers can vote!'
         if user_id in self.game.voters:
             return 'You have already voted!'
+
+    def handle_slash_command_exceptions(self, trigger_id):
+        game_dicts = self.game.firestore_reader.get_game_dicts()
+        app_conversations = self.game.firestore_reader.get_app_conversations()
+        exception_msg = self.build_slash_command_exception_msg(
+            game_dicts, app_conversations)
+        if exception_msg:
+            utils.slack.SlackOperator(self.game).open_exception_view(
+                trigger_id, exception_msg)
+            return make_response('', 200)

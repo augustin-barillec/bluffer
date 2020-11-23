@@ -7,6 +7,7 @@ import yaml
 import google.cloud.pubsub_v1
 import google.cloud.firestore
 import google.cloud.storage
+import app.handlers as handlers
 import app.utils as ut
 from copy import deepcopy
 from datetime import datetime
@@ -47,24 +48,13 @@ def slash_command(request):
     channel_id = request.form['channel_id']
     organizer_id = request.form['user_id']
     trigger_id = request.form['trigger_id']
-
     slash_command_compact = ut.time.datetime_to_compact(ut.time.get_now())
     game_id = ut.ids.build_game_id(
         slash_command_compact, team_id, channel_id, organizer_id, trigger_id)
     logger.info('game_id built, game_id={}'.format(game_id))
     game = build_game(game_id)
-    slack_operator = ut.slack.SlackOperator(game)
-    exceptions = ut.exceptions.Exceptions(game)
-
-    game_dicts = game.firestore_reader.get_game_dicts()
-    app_conversations = game.firestore_reader.get_app_conversations()
-    exception_msg = exceptions.\
-        build_slash_command_exception_msg(game_dicts, app_conversations)
-    if exception_msg:
-        slack_operator.open_exception_view(trigger_id, exception_msg)
-        return make_response('', 200)
-
-    slack_operator.open_setup_view(trigger_id)
+    ut.exceptions.Exceptions(game).handle_slash_command_exceptions(trigger_id)
+    ut.slack.SlackOperator(game).open_setup_view(trigger_id)
     logger.info('setup_view opened, game_id={}'.format(game_id))
     return make_response('', 200)
 
@@ -77,108 +67,12 @@ def message_actions(request):
         return make_response('', 200)
 
     if message_action_type == 'view_submission':
-        view = message_action['view']
-        view_callback_id = view['callback_id']
-        if not view_callback_id.startswith(secret_prefix):
-            return make_response('', 200)
-
-        game_id = ut.ids.slack_object_id_to_game_id(view_callback_id)
-        game = build_game(game_id)
-
-        if view_callback_id.startswith(secret_prefix + '#game_setup_view'):
-            question, truth, time_to_guess = ut.views.collect_game_setup(
-                view)
-            game.setup_submission = ut.time.get_now()
-            game.question = question
-            game.truth = truth
-            game.time_to_guess = time_to_guess
-            game.max_life_span = ut.time.build_max_life_span(
-                game.time_to_guess, game.time_to_vote)
-
-            game_dicts = game.firestore_reader.get_game_dicts()
-            exception_msg = ut.exceptions.Exceptions(game).\
-                build_setup_view_exception_msg(game_dicts)
-            if exception_msg:
-                return ut.views.build_exception_view_response(exception_msg)
-
-            game.dict = {
-                'version': game.version,
-                'setup_submission': game.setup_submission,
-                'question': game.question,
-                'truth': game.truth,
-                'time_to_guess': game.time_to_guess,
-                'max_life_span': game.max_life_span}
-            ut.firestore.FirestoreEditor(game).set_game_dict()
-            game.stage_triggerer.trigger_pre_guess_stage()
-            logger.info('pre_guess_stage triggered, game_id={}'.format(
-                game_id))
-            return make_response('', 200)
-
-        exceptions = ut.exceptions.Exceptions(game)
-        exception_msg = exceptions.build_game_is_dead_msg()
-        if exception_msg:
-            return ut.views.build_exception_view_response(exception_msg)
-
-        if view_callback_id.startswith(secret_prefix + '#guess_view'):
-            guess = ut.views.collect_guess(view)
-            exception_msg = exceptions.build_guess_view_exception_msg(guess)
-            if exception_msg:
-                return ut.views.build_exception_view_response(exception_msg)
-            guess_ts = ut.time.get_now()
-            game.dict['guessers'][user_id] = [guess_ts, guess]
-            ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
-            ut.slack.SlackOperator(game).update_guess_stage_lower()
-            logger.info('guess recorded, guesser_id={}, game_id={}'.format(
-                game_id, user_id))
-            return make_response('', 200)
-
-        if view_callback_id.startswith(secret_prefix + '#vote_view'):
-            vote = ut.views.collect_vote(view)
-            exception_msg = exceptions.build_vote_view_exception_msg(vote)
-            if exception_msg:
-                return ut.views.build_exception_view_response(exception_msg)
-            vote_ts = ut.time.get_now()
-            game.dict['voters'][user_id] = [vote_ts, vote]
-            ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
-            ut.slack.SlackOperator(game).update_guess_stage_lower()
-            logger.info('vote recorded, voter_id={}, game_id={} '.format(
-                game_id, user_id))
-            return make_response('', 200)
+        return handlers.handle_view_submission(
+            user_id, message_action, build_game, secret_prefix, logger)
 
     if message_action_type == 'block_actions':
-        trigger_id = message_action['trigger_id']
-        action_block_id = message_action['actions'][0]['block_id']
-        if not action_block_id.startswith(secret_prefix):
-            return make_response('', 200)
-        game_id = ut.ids.slack_object_id_to_game_id(action_block_id)
-        game = build_game(game_id)
-        exceptions = ut.exceptions.Exceptions(game)
-        slack_operator = ut.slack.SlackOperator(game)
-
-        exception_msg = exceptions.build_game_is_dead_msg()
-        if exception_msg:
-            return ut.views.build_exception_view_response(exception_msg)
-
-        if action_block_id.startswith(secret_prefix + '#guess_button_block'):
-            exception_msg = exceptions.build_guess_button_exception_msg(
-                user_id)
-            if exception_msg:
-                slack_operator.open_exception_view(trigger_id, exception_msg)
-                return make_response('', 200)
-            slack_operator.open_guess_view(trigger_id)
-            logger.info('guess_view opened, user_id={}, game_id={}'.format(
-                game_id, user_id))
-            return make_response('', 200)
-
-        if action_block_id.startswith(secret_prefix + '#vote_button_block'):
-            exception_msg = exceptions.build_vote_button_exception_msg(user_id)
-            if exception_msg:
-                slack_operator.open_exception_view(trigger_id, exception_msg)
-                return make_response('', 200)
-            slack_operator.open_vote_view(trigger_id, user_id)
-            logger.info('vote_view opened, user_id={}, game_id={}'.format(
-                game_id, user_id))
-            return make_response('', 200)
+        return handlers.handle_button_click(
+            user_id, message_action, build_game, secret_prefix, logger)
 
 
 def pre_guess_stage(event, context):
@@ -192,9 +86,8 @@ def pre_guess_stage(event, context):
     if game.pre_guess_stage_already_triggered:
         logger.info(exceptions.build_aborted_cause_already_triggered_msg())
         return make_response('', 200)
-    else:
-        game.dict['pre_guess_stage_already_triggered'] = True
-        ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
+    game.dict['pre_guess_stage_already_triggered'] = True
+    ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
 
     slack_operator = ut.slack.SlackOperator(game)
     game.upper_ts, game.lower_ts = slack_operator.post_pre_guess_stage()
@@ -276,9 +169,8 @@ def pre_vote_stage(event, context):
     if game.pre_vote_stage_already_triggered:
         logger.info(exceptions.build_aborted_cause_already_triggered_msg())
         return make_response('', 200)
-    else:
-        game.dict['pre_vote_stage_already_triggered'] = True
-        ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
+    game.dict['pre_vote_stage_already_triggered'] = True
+    ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
 
     ut.slack.SlackOperator(game).update_pre_vote_stage()
 
@@ -360,9 +252,8 @@ def pre_result_stage(event, context):
     if game.pre_result_stage_already_triggered:
         logger.info(exceptions.build_aborted_cause_already_triggered_msg())
         return make_response('', 200)
-    else:
-        game.dict['pre_result_stage_already_triggered'] = True
-        ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
+    game.dict['pre_result_stage_already_triggered'] = True
+    ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
 
     ut.slack.SlackOperator(game).update_pre_result_stage()
 
