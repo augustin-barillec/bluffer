@@ -171,3 +171,53 @@ class Exceptions:
             utils.slack.SlackOperator(self.game).open_exception_view(
                 trigger_id, exception_msg)
             return make_response('', 200)
+
+    def handle_pre_guess_stage_exceptions(self):
+        if self.game_is_dead():
+            return make_response('', 200)
+        if self.game.pre_guess_stage_already_triggered:
+            self.game.logger.info(
+                self.build_aborted_cause_already_triggered_msg())
+            return make_response('', 200)
+
+    def handle_guess_stage_exceptions(self):
+        if self.game_is_dead():
+            return make_response('', 200)
+        if self.game.guess_stage_over:
+            return make_response('', 200)
+        if self.guess_stage_was_recently_trigger():
+            self.game.logger.info(
+                self.build_aborted_cause_recently_triggered_msg())
+            return make_response('', 200)
+
+    def handle_pre_vote_stage_exceptions(self):
+        if self.game_is_dead():
+            return make_response('', 200)
+        if self.game.pre_vote_stage_already_triggered:
+            self.game.logger.info(
+                self.build_aborted_cause_already_triggered_msg())
+            return make_response('', 200)
+
+    def handle_vote_stage_exceptions(self):
+        if self.game_is_dead():
+            return make_response('', 200)
+        if self.game.vote_stage_over:
+            return make_response('', 200)
+        if self.vote_stage_was_recently_trigger():
+            self.game.logger.info(
+                self.build_aborted_cause_recently_triggered_msg())
+            return make_response('', 200)
+
+    def handle_pre_results_stage_exceptions(self):
+        if self.game_is_dead():
+            return make_response('', 200)
+        if self.game.pre_result_stage_already_triggered:
+            self.game.logger.info(
+                self.build_aborted_cause_already_triggered_msg())
+            return make_response('', 200)
+
+    def handle_results_stage_exceptions(self):
+        if self.game_is_dead():
+            return make_response('', 200)
+        if self.game.result_stage_over:
+            return make_response('', 200)
