@@ -1,4 +1,4 @@
-import app.utils as utils
+from app import utils
 from copy import deepcopy
 
 
@@ -6,35 +6,45 @@ def get_block(basename):
     return utils.jsons.get_json('blocks', basename)
 
 
-divider_block = get_block('divider.json')
-text_block_template = get_block('text.json')
-button_block_template = get_block('button.json')
-image_block_template = get_block('image.json')
+def get_divider_block():
+    return get_block('divider.json')
+
+
+def get_text_block_template():
+    return get_block('text.json')
+
+
+def get_button_block_template():
+    return get_block('button.json')
+
+
+def get_image_block_template():
+    return get_block('image.json')
 
 
 def u(blocks):
-    return [divider_block] + blocks
+    return [get_divider_block()] + blocks
 
 
 def d(blocks):
-    return blocks + [divider_block]
+    return blocks + [get_divider_block()]
 
 
 def build_text_block(msg):
-    res = deepcopy(text_block_template)
+    res = get_text_block_template()
     res['text']['text'] = msg
     return res
 
 
 def build_button_block(msg, id_):
-    res = deepcopy(button_block_template)
+    res = get_button_block_template()
     res['elements'][0]['text']['text'] = msg
     res['block_id'] = id_
     return res
 
 
 def build_image_block(url, alt_text):
-    res = deepcopy(image_block_template)
+    res = get_image_block_template()
     res['image_url'] = url
     res['alt_text'] = alt_text
     return res

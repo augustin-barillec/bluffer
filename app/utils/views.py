@@ -1,5 +1,5 @@
 import json
-import app.utils as utils
+from app import utils
 from copy import deepcopy
 from flask import Response
 
@@ -20,7 +20,7 @@ def build_exception_view(msg):
     return res
 
 
-def build_exception_view_response(msg):
+def build_exception_response(msg):
     exception_view = build_exception_view(msg)
     res = {'response_action': 'update', 'view': exception_view}
     res = Response(json.dumps(res),

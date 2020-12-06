@@ -1,4 +1,4 @@
-import app.utils as utils
+from app import utils
 
 
 def get_channel_members(slack_client, channel_id):
@@ -125,7 +125,7 @@ class SlackOperator:
         self.update_message(blocks_, self.game.lower_ts)
 
     def open_setup_view(self, trigger_id):
-        self.open_view(trigger_id, self.game.view_builder.build_setup_view())
+        self.open_view(trigger_id, self.view_builder.build_setup_view())
 
     def open_guess_view(self, trigger_id):
         self.open_view(trigger_id, self.view_builder.build_guess_view())

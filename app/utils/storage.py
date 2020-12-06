@@ -7,4 +7,3 @@ def upload_to_gs(bucket, bucket_dir_name, local_file_path):
     blob = bucket.blob(blob_name)
     blob.upload_from_filename(local_file_path)
     return blob.public_url
-

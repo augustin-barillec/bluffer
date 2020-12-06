@@ -7,11 +7,11 @@ import yaml
 import google.cloud.pubsub_v1
 import google.cloud.firestore
 import google.cloud.storage
-import app.handlers as handlers
-import app.utils as ut
 from copy import deepcopy
 from datetime import datetime
 from flask import make_response
+from app import utils as ut
+from app import message_actions as ma
 from app.game import Game
 
 logging.basicConfig(
@@ -67,16 +67,17 @@ def message_actions(request):
         return make_response('', 200)
 
     if message_action_type == 'view_submission':
-        return handlers.handle_view_submission(
+        return ma.handle_view_submission(
             user_id, message_action, build_game, secret_prefix, logger)
 
     if message_action_type == 'block_actions':
-        return handlers.handle_button_click(
+        return ma.handle_button_click(
             user_id, message_action, build_game, secret_prefix, logger)
 
 
 def pre_guess_stage(event, context):
     assert context == context
+
     game_id = ut.pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
     ut.exceptions.Exceptions(game).handle_pre_guess_stage_exceptions()
@@ -90,12 +91,6 @@ def pre_guess_stage(event, context):
     game.guess_start = ut.time.get_now()
     game.guess_deadline = ut.time.compute_deadline(
         game.guess_start, game.time_to_guess)
-    game.dict['upper_ts'] = game.upper_ts
-    game.dict['lower_ts'] = game.potential_guessers
-    game.dict['potential_guessers'] = game.potential_guessers
-    game.dict['guessers'] = game.guessers
-    game.dict['guess_start'] = game.guess_start
-    game.dict['guess_deadline'] = game.guess_deadline
     for attribute in [
         'upper_ts',
         'lower_ts',

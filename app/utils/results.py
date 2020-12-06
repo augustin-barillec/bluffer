@@ -1,10 +1,11 @@
-import app.utils as utils
+from app import utils
 
 
 class ResultsBuilder:
 
     def __init__(self, game):
         self.game = game
+        self.proposals_browser = utils.proposals.ProposalsBrowser(self.game)
 
     def get_guesser_name(self, guesser):
         return self.game.potential_guessers[guesser]
@@ -15,7 +16,7 @@ class ResultsBuilder:
     def compute_bluff_score(self, voter):
         res = 0
         for voter_ in self.game.frozen_voters:
-            voter_index = self.game.proposals_browser.author_to_index(voter)
+            voter_index = self.proposals_browser.author_to_index(voter)
             if self.game.frozen_voters[voter_][1] == voter_index:
                 res += 2
         return res
@@ -39,8 +40,8 @@ class ResultsBuilder:
                 continue
             vote_index = self.game.frozen_voters[author][1]
             r['vote_index'] = vote_index
-            r['chosen_author'] = utils.proposals.ProposalsBrowser(
-                self.game).index_to_author(vote_index)
+            r['chosen_author'] = self.proposals_browser.index_to_author(
+                vote_index)
             r['truth_score'] = self.compute_truth_score(author)
             r['bluff_score'] = self.compute_bluff_score(author)
             r['score'] = r['truth_score'] + r['bluff_score']

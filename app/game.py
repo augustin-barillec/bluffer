@@ -1,5 +1,5 @@
-import app.utils as utils
 from slackclient import SlackClient
+from app import utils
 from app.version import VERSION
 
 
@@ -63,7 +63,7 @@ class Game:
         self.guess_deadline = self.dict.get('guess_deadline')
         self.guess_stage_last_trigger = self.dict.get(
             'guess_stage_last_trigger')
-        self.guess_stage_over = self.dict.get('guess_stage_over')
+        self.guess_stage_over = self.dict.get('guess_stage_over', False)
         self.guess_start = self.dict.get('guess_start')
         self.guessers = self.dict.get('guessers')
         self.indexed_signed_proposals = self.dict.get(
@@ -74,13 +74,13 @@ class Game:
         self.potential_guessers = self.dict.get('potential_guessers')
         self.potential_voters = self.dict.get('potential_voters')
         self.pre_guess_stage_already_triggered = self.dict.get(
-            'pre_guess_stage_already_triggered')
+            'pre_guess_stage_already_triggered', False)
         self.pre_result_stage_already_triggered = self.dict.get(
-            'pre_result_stage_already_triggered')
+            'pre_result_stage_already_triggered', False)
         self.pre_vote_stage_already_triggered = self.dict.get(
-            'pre_vote_stage_already_triggered')
+            'pre_vote_stage_already_triggered', False)
         self.question = self.dict.get('question')
-        self.result_stage_over = self.dict.get('result_stage_over')
+        self.result_stage_over = self.dict.get('result_stage_over', False)
         self.results = self.dict.get('results')
         self.setup_submission = self.dict.get('setup_submission')
         self.time_to_guess = self.dict.get('time_to_guess')
@@ -90,23 +90,25 @@ class Game:
         self.version = self.dict.get('version')
         self.vote_deadline = self.dict.get('vote_deadline')
         self.vote_stage_last_trigger = self.dict.get('vote_stage_last_trigger')
-        self.vote_stage_over = self.dict.get('vote_stage_over')
+        self.vote_stage_over = self.dict.get('vote_stage_over', False)
         self.vote_start = self.dict.get('vote_start')
         self.voters = self.dict.get('voters')
         self.winners = self.dict.get('winners')
 
-        if self.guess_deadline is not None:
-            self.time_left_to_guess = utils.time.compute_time_left(
-                self.guess_deadline)
-        if self.vote_deadline is not None:
-            self.time_left_to_vote = utils.time.compute_time_left(
-                self.vote_deadline)
+    @property
+    def time_left_to_guess(self):
+        return utils.time.compute_time_left(self.guess_deadline)
 
-        if self.potential_guessers is not None and self.guessers is not None:
-            self.remaining_potential_guessers = \
-                utils.users.compute_remaining_potential_guessers(
+    @property
+    def time_left_to_vote(self):
+        return utils.time.compute_time_left(self.vote_deadline)
+
+    @property
+    def remaining_potential_guessers(self):
+        return utils.users.compute_remaining_potential_guessers(
                     self.potential_guessers, self.guessers)
-        if self.potential_voters is not None and self.voters is not None:
-            self.remaining_potential_voters = \
-                utils.users.compute_remaining_potential_voters(
+
+    @property
+    def remaining_potential_voters(self):
+        return utils.users.compute_remaining_potential_voters(
                     self.potential_voters, self.voters)

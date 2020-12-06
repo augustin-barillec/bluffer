@@ -1,6 +1,6 @@
 import networkx as nx
 import matplotlib.pyplot as plt
-import app.utils as utils
+from app import utils
 
 
 def build_graph(game):
