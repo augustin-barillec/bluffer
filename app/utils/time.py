@@ -25,8 +25,8 @@ def datetime1_minus_datetime2(d1, d2):
     return int((d1 - d2).total_seconds())
 
 
-def compute_time_left(deadline):
-    return datetime1_minus_datetime2(deadline, get_now())
+def compute_time_left(now, deadline):
+    return datetime1_minus_datetime2(deadline, now)
 
 
 def total_seconds_to_minutes_seconds(total_seconds):

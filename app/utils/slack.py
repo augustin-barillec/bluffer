@@ -15,9 +15,9 @@ def user_info_to_user_name(user_info):
     dn = user_info['profile'].get('display_name')
     fn = user_info['profile'].get('first_name')
     n = user_info['name']
-    if dn is not None and dn != '':
+    if dn:
         return dn
-    if fn is not None and fn != '':
+    if fn:
         return fn
     return n
 

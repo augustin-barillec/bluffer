@@ -3,11 +3,14 @@ from flask import make_response
 from app.version import VERSION
 
 
-class Exceptions:
+class ExceptionsHandler:
 
     def __init__(self, game):
         self.game = game
-        self.slack_operator = utils.slack.SlackOperator(game)
+
+    @property
+    def slack_operator(self):
+        return utils.slack.SlackOperator(self.game)
 
     @staticmethod
     def count_running_games(game_dicts):
@@ -51,6 +54,8 @@ class Exceptions:
         if not self.game.exists:
             return True
         if self.game.setup_submission is None:
+            return True
+        if self.game.max_life_span is None:
             return True
         if self.game_is_too_old():
             return True
@@ -167,7 +172,7 @@ class Exceptions:
         exception_msg = self.build_game_is_dead_msg()
         if exception_msg is None:
             return
-        if trigger_id is not None:
+        if trigger_id:
             self.slack_operator.open_exception_view(trigger_id, exception_msg)
             return make_response('', 200)
         else:

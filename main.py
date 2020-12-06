@@ -53,7 +53,10 @@ def slash_command(request):
         slash_command_compact, team_id, channel_id, organizer_id, trigger_id)
     logger.info('game_id built, game_id={}'.format(game_id))
     game = build_game(game_id)
-    ut.exceptions.Exceptions(game).handle_slash_command_exceptions(trigger_id)
+    resp = ut.exceptions.ExceptionsHandler(
+        game).handle_slash_command_exceptions(trigger_id)
+    if resp:
+        return resp
     ut.slack.SlackOperator(game).open_setup_view(trigger_id)
     logger.info('setup_view opened, game_id={}'.format(game.id))
     return make_response('', 200)
@@ -67,11 +70,11 @@ def message_actions(request):
         return make_response('', 200)
 
     if message_action_type == 'view_submission':
-        return ma.handle_view_submission(
+        return ma.handle_submission(
             user_id, message_action, build_game, secret_prefix, logger)
 
     if message_action_type == 'block_actions':
-        return ma.handle_button_click(
+        return ma.handle_click(
             user_id, message_action, build_game, secret_prefix, logger)
 
 
@@ -80,7 +83,10 @@ def pre_guess_stage(event, context):
 
     game_id = ut.pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
-    ut.exceptions.Exceptions(game).handle_pre_guess_stage_exceptions()
+    resp = ut.exceptions.ExceptionsHandler(
+        game).handle_pre_guess_stage_exceptions()
+    if resp:
+        return resp
     game.dict['pre_guess_stage_already_triggered'] = True
     ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
 
@@ -102,6 +108,7 @@ def pre_guess_stage(event, context):
         game.dict[attribute] = game.__dict__[attribute]
     ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
 
+    game = build_game(game_id)
     ut.slack.SlackOperator(game).update_guess_stage()
     game.stage_triggerer.trigger_guess_stage()
     logger.info('guess_stage triggered, game_id={}'.format(game_id))
@@ -113,7 +120,10 @@ def guess_stage(event, context):
     call_datetime = datetime.now(pytz.UTC)
     game_id = ut.pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
-    ut.exceptions.Exceptions(game).handle_guess_stage_exceptions()
+    resp = ut.exceptions.ExceptionsHandler(
+        game).handle_guess_stage_exceptions()
+    if resp:
+        return resp
     game.dict['guess_stage_last_trigger'] = ut.time.get_now()
     ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
 
@@ -142,7 +152,10 @@ def pre_vote_stage(event, context):
     assert context == context
     game_id = ut.pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
-    ut.exceptions.Exceptions(game).handle_pre_vote_stage_exceptions()
+    resp = ut.exceptions.ExceptionsHandler(
+        game).handle_pre_vote_stage_exceptions()
+    if resp:
+        return resp
     game.dict['pre_vote_stage_already_triggered'] = True
     ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
     ut.slack.SlackOperator(game).update_pre_vote_stage()
@@ -167,6 +180,7 @@ def pre_vote_stage(event, context):
         game.dict[attribute] = game.__dict__[attribute]
     ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
 
+    game = build_game(game_id)
     slack_operator = ut.slack.SlackOperator(game)
     slack_operator.update_vote_stage()
     slack_operator.send_vote_reminders()
@@ -180,7 +194,9 @@ def vote_stage(event, context):
     call_datetime = datetime.now(pytz.UTC)
     game_id = ut.pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
-    ut.exceptions.Exceptions(game).handle_vote_stage_exceptions()
+    resp = ut.exceptions.ExceptionsHandler(game).handle_vote_stage_exceptions()
+    if resp:
+        return resp
     game.dict['vote_stage_last_trigger'] = ut.time.get_now()
     ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
 
@@ -210,7 +226,10 @@ def pre_result_stage(event, context):
     assert context == context
     game_id = ut.pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
-    ut.exceptions.Exceptions(game).handle_pre_results_stage_exceptions()
+    resp = ut.exceptions.ExceptionsHandler(
+        game).handle_pre_results_stage_exceptions()
+    if resp:
+        return resp
     game.dict['pre_result_stage_already_triggered'] = True
     ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
     ut.slack.SlackOperator(game).update_pre_result_stage()
@@ -237,7 +256,10 @@ def result_stage(event, context):
     assert context == context
     game_id = ut.pubsub.event_data_to_game_id(event['data'])
     game = build_game(game_id)
-    ut.exceptions.Exceptions(game).handle_results_stage_exceptions()
+    resp = ut.exceptions.ExceptionsHandler(
+        game).handle_results_stage_exceptions()
+    if resp:
+        return resp
     game.dict['result_stage_over'] = True
     firestore_editor = ut.firestore.FirestoreEditor(game)
     firestore_editor.set_game_dict(merge=True)
@@ -254,6 +276,6 @@ def erase(event, context):
         games_ref = ut.firestore.get_games_ref(db, t.id)
         for g in games_ref.stream():
             game = build_game(g.id)
-            if ut.exceptions.Exceptions(game).game_is_dead():
+            if ut.exceptions.ExceptionsHandler(game).game_is_dead():
                 ut.firestore.FirestoreEditor(game).delete_game()
                 logger.info('game deleted, game_id={}'.format(g.id))

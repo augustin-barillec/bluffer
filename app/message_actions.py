@@ -2,7 +2,7 @@ from flask import make_response
 from app import utils as ut
 
 
-def handle_view_submission(
+def handle_submission(
         user_id, message_action, build_game_func, secret_prefix, logger):
     view = message_action['view']
     view_callback_id = view['callback_id']
@@ -15,17 +15,19 @@ def handle_view_submission(
     if view_callback_id.startswith(secret_prefix + '#game_setup_view'):
         return handle_setup_submission(game, view, logger)
 
-    exceptions = ut.exceptions.Exceptions(game)
-    exceptions.handle_is_dead_exception()
+    eh = ut.exceptions.ExceptionsHandler(game)
+    resp = eh.handle_is_dead_exception()
+    if resp:
+        return resp
 
     if view_callback_id.startswith(secret_prefix + '#guess_view'):
-        return handle_guess_submission(user_id, game, view, exceptions, logger)
+        return handle_guess_submission(user_id, game, view, eh, logger)
 
     if view_callback_id.startswith(secret_prefix + '#vote_view'):
-        return handle_vote_submission(user_id, game, view, exceptions, logger)
+        return handle_vote_submission(user_id, game, view, eh, logger)
 
 
-def handle_button_click(
+def handle_click(
         user_id, message_action, build_game_func, secret_prefix, logger):
     trigger_id = message_action['trigger_id']
     action_block_id = message_action['actions'][0]['block_id']
@@ -34,16 +36,18 @@ def handle_button_click(
     game_id = ut.ids.slack_object_id_to_game_id(action_block_id)
     game = build_game_func(game_id)
     slack_operator = ut.slack.SlackOperator(game)
-    exceptions = ut.exceptions.Exceptions(game)
-    exceptions.handle_is_dead_exception(trigger_id)
+    eh = ut.exceptions.ExceptionsHandler(game)
+    resp = eh.handle_is_dead_exception(trigger_id)
+    if resp:
+        return resp
 
     if action_block_id.startswith(secret_prefix + '#guess_button_block'):
         return handle_guess_click(
-            user_id, trigger_id, game, slack_operator, exceptions, logger)
+            user_id, trigger_id, game, slack_operator, eh, logger)
 
     if action_block_id.startswith(secret_prefix + '#vote_button_block'):
         return handle_vote_click(
-            user_id, trigger_id, game, slack_operator, exceptions, logger)
+            user_id, trigger_id, game, slack_operator, eh, logger)
 
 
 def handle_setup_submission(game, game_setup_view, logger):
@@ -55,8 +59,10 @@ def handle_setup_submission(game, game_setup_view, logger):
     game.time_to_guess = time_to_guess
     game.max_life_span = ut.time.build_max_life_span(
         game.time_to_guess, game.time_to_vote)
-
-    ut.exceptions.Exceptions(game).handle_setup_submission_exceptions()
+    resp = ut.exceptions.ExceptionsHandler(
+        game).handle_setup_submission_exceptions()
+    if resp:
+        return resp
 
     game.dict = {
         'version': game.version,
@@ -71,43 +77,54 @@ def handle_setup_submission(game, game_setup_view, logger):
     return make_response('', 200)
 
 
-def handle_guess_submission(user_id, game, guess_view, exceptions, logger):
+def handle_guess_submission(
+        user_id, game, guess_view, exceptions_handler, logger):
     guess = ut.views.collect_guess(guess_view)
-    exceptions.handle_guess_submission_exceptions(guess)
+    resp = exceptions_handler.handle_guess_submission_exceptions(guess)
+    if resp:
+        return resp
     guess_ts = ut.time.get_now()
     game.dict['guessers'][user_id] = [guess_ts, guess]
     ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
     ut.slack.SlackOperator(game).update_guess_stage_lower()
     logger.info('guess recorded, guesser_id={}, game_id={}'.format(
-        game.id, user_id))
+        user_id, game.id))
     return make_response('', 200)
 
 
-def handle_vote_submission(user_id, game, vote_view, exceptions, logger):
+def handle_vote_submission(
+        user_id, game, vote_view, exceptions_handler, logger):
     vote = ut.views.collect_vote(vote_view)
-    exceptions.handle_vote_submission_exceptions(vote)
+    resp = exceptions_handler.handle_vote_submission_exceptions(vote)
+    if resp:
+        return resp
     vote_ts = ut.time.get_now()
     game.dict['voters'][user_id] = [vote_ts, vote]
     ut.firestore.FirestoreEditor(game).set_game_dict(merge=True)
     ut.slack.SlackOperator(game).update_guess_stage_lower()
     logger.info('vote recorded, voter_id={}, game_id={} '.format(
-        game.id, user_id))
+        user_id, game.id))
     return make_response('', 200)
 
 
 def handle_guess_click(
-        user_id, trigger_id, game, slack_operator, exceptions, logger):
-    exceptions.handle_guess_click_exceptions(user_id, trigger_id)
+        user_id, trigger_id, game, slack_operator, exceptions_handler, logger):
+    resp = exceptions_handler.handle_guess_click_exceptions(
+        user_id, trigger_id)
+    if resp:
+        return resp
     slack_operator.open_guess_view(trigger_id)
     logger.info('guess_view opened, user_id={}, game_id={}'.format(
-        game.id, user_id))
+        user_id, game.id))
     return make_response('', 200)
 
 
 def handle_vote_click(
-        user_id, trigger_id, game, slack_operator, exceptions, logger):
-    exceptions.handle_vote_click_exceptions(user_id, trigger_id)
+        user_id, trigger_id, game, slack_operator, exceptions_handler, logger):
+    resp = exceptions_handler.handle_vote_click_exceptions(user_id, trigger_id)
+    if resp:
+        return resp
     slack_operator.open_vote_view(trigger_id, user_id)
     logger.info('vote_view opened, user_id={}, game_id={}'.format(
-        game.id, user_id))
+        user_id, game.id))
     return make_response('', 200)
