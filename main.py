@@ -1,6 +1,7 @@
 import os
 import logging
 import time
+import base64
 import pytz
 import json
 import yaml
@@ -52,6 +53,22 @@ def slash_command(request):
     game_id = ut.ids.build_game_id(
         slash_command_compact, team_id, channel_id, organizer_id, trigger_id)
     logger.info('game_id built, game_id={}'.format(game_id))
+    ut.pubsub.Triggerer(publisher, project_id, game_id).\
+        trigger_handle_slash_command(trigger_id)
+    return make_response('', 200)
+
+
+def message_actions(request):
+    message_action = request.form['payload']
+    ut.pubsub.Triggerer(publisher, project_id).\
+        trigger_handle_message_actions(message_action)
+    return make_response('', 200)
+
+
+def handle_slash_command(event, context):
+    assert context == context
+    game_id = event['attributes']['game_id']
+    trigger_id = event['attributes']['game_id']
     game = build_game(game_id)
     resp = ut.exceptions.ExceptionsHandler(
         game).handle_slash_command_exceptions(trigger_id)
@@ -62,10 +79,13 @@ def slash_command(request):
     return make_response('', 200)
 
 
-def message_actions(request):
-    message_action = json.loads(request.form['payload'])
+def handle_message_actions(event, context):
+    assert context == context
+    message_action = json.loads(
+        base64.b64decode(event['data']).decode('utf-8'))
     message_action_type = message_action['type']
     user_id = message_action['user']['id']
+
     if message_action_type not in ('block_actions', 'view_submission'):
         return make_response('', 200)
 
@@ -110,7 +130,7 @@ def pre_guess_stage(event, context):
 
     game = build_game(game_id)
     ut.slack.SlackOperator(game).update_guess_stage()
-    game.stage_triggerer.trigger_guess_stage()
+    game.triggerer.trigger_guess_stage()
     logger.info('guess_stage triggered, game_id={}'.format(game_id))
     return make_response('', 200)
 
