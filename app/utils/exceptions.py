@@ -168,51 +168,50 @@ class ExceptionsHandler:
         if user_id in self.game.voters:
             return 'You have already voted!'
 
-    def handle_is_dead_exception(self, trigger_id=None):
+    def handle_is_dead_exception(self, user_id):
         exception_msg = self.build_game_is_dead_msg()
-        if exception_msg is None:
-            return
-        if trigger_id:
-            self.slack_operator.open_exception_view(trigger_id, exception_msg)
+        if exception_msg:
+            self.slack_operator.post_ephemeral(user_id, exception_msg)
             return make_response('', 200)
-        else:
-            return utils.views.build_exception_response(exception_msg)
 
-    def handle_slash_command_exceptions(self, trigger_id):
+    def handle_slash_command_exceptions(self, organizer_id):
         game_dicts = self.game.firestore_reader.get_game_dicts()
         app_conversations = self.slack_operator.get_app_conversations()
         exception_msg = self.build_slash_command_exception_msg(
             game_dicts, app_conversations)
         if exception_msg:
-            self.slack_operator.open_exception_view(trigger_id, exception_msg)
+            self.slack_operator.post_ephemeral(organizer_id, exception_msg)
             return make_response('', 200)
 
-    def handle_setup_submission_exceptions(self):
+    def handle_setup_submission_exceptions(self, organizer_id):
         game_dicts = self.game.firestore_reader.get_game_dicts()
         exception_msg = self.build_setup_submission_exception_msg(game_dicts)
         if exception_msg:
-            return utils.views.build_exception_response(exception_msg)
-
-    def handle_guess_submission_exceptions(self, guess):
-        exception_msg = self.build_guess_submission_exception_msg(guess)
-        if exception_msg:
-            return utils.views.build_exception_response(exception_msg)
-
-    def handle_vote_submission_exceptions(self, vote):
-        exception_msg = self.build_vote_submission_exception_msg(vote)
-        if exception_msg:
-            return utils.views.build_exception_response(exception_msg)
-
-    def handle_guess_click_exceptions(self, user_id, trigger_id):
-        exception_msg = self.build_guess_click_exception_msg(user_id)
-        if exception_msg:
-            self.slack_operator.open_exception_view(trigger_id, exception_msg)
+            self.slack_operator.post_ephemeral(organizer_id, exception_msg)
             return make_response('', 200)
 
-    def handle_vote_click_exceptions(self, user_id, trigger_id):
-        exception_msg = self.build_vote_click_exception_msg(user_id)
+    def handle_guess_submission_exceptions(self, guesser_id, guess):
+        exception_msg = self.build_guess_submission_exception_msg(guess)
         if exception_msg:
-            self.slack_operator.open_exception_view(trigger_id, exception_msg)
+            self.slack_operator.post_ephemeral(guesser_id, exception_msg)
+            return make_response('', 200)
+
+    def handle_vote_submission_exceptions(self, voter_id, vote):
+        exception_msg = self.build_vote_submission_exception_msg(vote)
+        if exception_msg:
+            self.slack_operator.post_ephemeral(voter_id, exception_msg)
+            return make_response('', 200)
+
+    def handle_guess_click_exceptions(self, guesser_id):
+        exception_msg = self.build_guess_click_exception_msg(guesser_id)
+        if exception_msg:
+            self.slack_operator.post_ephemeral(guesser_id, exception_msg)
+            return make_response('', 200)
+
+    def handle_vote_click_exceptions(self, voter_id):
+        exception_msg = self.build_vote_click_exception_msg(voter_id)
+        if exception_msg:
+            self.slack_operator.post_ephemeral(voter_id, exception_msg)
             return make_response('', 200)
 
     def handle_pre_guess_stage_exceptions(self):

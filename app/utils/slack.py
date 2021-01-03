@@ -75,11 +75,6 @@ def open_view(slack_client, trigger_id, view):
         view=view)
 
 
-def open_exception_view(slack_client, trigger_id, msg):
-    exception_view = utils.views.build_exception_view(msg)
-    open_view(slack_client, trigger_id, exception_view)
-
-
 def get_app_conversations(slack_client):
     return slack_client.api_call(
         'users.conversations',
@@ -114,9 +109,6 @@ class SlackOperator:
 
     def open_view(self, trigger_id, view):
         open_view(self.game.slack_client, trigger_id, view)
-
-    def open_exception_view(self, trigger_id, msg):
-        open_exception_view(self.game.slack_client, trigger_id, msg)
 
     def update_upper(self, blocks_):
         self.update_message(blocks_, self.game.upper_ts)

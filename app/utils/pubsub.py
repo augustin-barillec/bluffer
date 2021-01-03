@@ -5,7 +5,6 @@ def build_topic_path(project_id, topic_name):
     return 'projects/{}/topics/{}'.format(project_id, topic_name)
 
 
-
 class Triggerer:
 
     def __init__(self, publisher, project_id, game_id=None):
@@ -16,13 +15,13 @@ class Triggerer:
     def build_topic_path(self, topic_name):
         return build_topic_path(self.project_id, topic_name)
 
-    def trigger_handle_slash_command(self, trigger_id):
-        topic_path = self.build_topic_path('handle_slash_command_topic')
+    def trigger_handle_slash_command(self):
+        topic_path = self.build_topic_path('topic_handle_slash_command')
         self.publisher.publish(
-            topic_path, game_id=self.game_id, trigger_id=trigger_id)
+            topic_path, game_id=self.game_id)
 
     def trigger_handle_message_actions(self, message_action):
-        topic_path = self.build_topic_path('handle_message_actions_topic')
+        topic_path = self.build_topic_path('topic_handle_message_actions')
         message_action = message_action.encode("utf-8")
         self.publisher.publish(topic_path, data=message_action)
 

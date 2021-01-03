@@ -31,15 +31,8 @@ storage_client = google.cloud.storage.Client(project=project_id)
 bucket = storage_client.bucket(bucket_name)
 
 
-import base64
-
-
 def build_topic_path(project_id, topic_name):
     return 'projects/{}/topics/{}'.format(project_id, topic_name)
-
-
-def event_data_to_game_id(event_data):
-    return base64.b64decode(event_data).decode('utf-8')
 
 
 topic_path = build_topic_path(project_id, 'topic_pre_guess_stage')
