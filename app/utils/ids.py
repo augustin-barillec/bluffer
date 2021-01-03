@@ -59,9 +59,6 @@ class IdBuilder:
     def get_channel_id(self):
         return game_id_to_channel_id(self.game_id)
 
-    def build_code(self):
-        return self.game_id.encode("utf-8")
-
     def build_slack_object_id(self, object_name):
         return build_slack_object_id(
             self.secret_prefix, object_name, self.game_id)

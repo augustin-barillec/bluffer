@@ -27,13 +27,12 @@ class Game:
         self.logger = logger
 
         self.id_builder = utils.ids.IdBuilder(self.secret_prefix, self.id)
-        self.code = self.id_builder.build_code()
         self.team_id = self.id_builder.get_team_id()
         self.channel_id = self.id_builder.get_channel_id()
         self.organizer_id = self.id_builder.get_organizer_id()
 
         self.stage_triggerer = utils.pubsub.StageTriggerer(
-            self.publisher, self.project_id, self.code)
+            self.publisher, self.project_id, self.id)
 
         self.bucket_dir_name = self.team_id
         self.graph_basename = '{}_graph.png'.format(self.id)

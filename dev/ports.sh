@@ -11,6 +11,7 @@ in
     5005) echo vote_stage ;;
     5006) echo pre_result_stage ;;
     5007) echo result_stage ;;
+    5008) echo erase ;;
 esac
 }
 
@@ -25,5 +26,6 @@ in
     5005) echo event ;;
     5006) echo event ;;
     5007) echo event ;;
+    5008) echo event ;;
 esac
 }

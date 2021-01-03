@@ -11,7 +11,7 @@ export GOOGLE_APPLICATION_CREDENTIALS=$GOOGLE_APPLICATION_CREDENTIALS
 
 SOURCE=../main.py
 
-for port in {5000..5007}
+for port in {5000..5008}
 do
 n=$(port_to_function_name $port)
 s=$(port_to_signature_type $port)

@@ -81,7 +81,7 @@ def message_actions(request):
 def pre_guess_stage(event, context):
     assert context == context
 
-    game_id = ut.pubsub.event_data_to_game_id(event['data'])
+    game_id = event['attributes']['game_id']
     game = build_game(game_id)
     resp = ut.exceptions.ExceptionsHandler(
         game).handle_pre_guess_stage_exceptions()
@@ -118,7 +118,7 @@ def pre_guess_stage(event, context):
 def guess_stage(event, context):
     assert context == context
     call_datetime = datetime.now(pytz.UTC)
-    game_id = ut.pubsub.event_data_to_game_id(event['data'])
+    game_id = event['attributes']['game_id']
     game = build_game(game_id)
     resp = ut.exceptions.ExceptionsHandler(
         game).handle_guess_stage_exceptions()
@@ -150,7 +150,7 @@ def guess_stage(event, context):
 
 def pre_vote_stage(event, context):
     assert context == context
-    game_id = ut.pubsub.event_data_to_game_id(event['data'])
+    game_id = event['attributes']['game_id']
     game = build_game(game_id)
     resp = ut.exceptions.ExceptionsHandler(
         game).handle_pre_vote_stage_exceptions()
@@ -192,7 +192,7 @@ def pre_vote_stage(event, context):
 def vote_stage(event, context):
     assert context == context
     call_datetime = datetime.now(pytz.UTC)
-    game_id = ut.pubsub.event_data_to_game_id(event['data'])
+    game_id = event['attributes']['game_id']
     game = build_game(game_id)
     resp = ut.exceptions.ExceptionsHandler(game).handle_vote_stage_exceptions()
     if resp:
@@ -224,7 +224,7 @@ def vote_stage(event, context):
 
 def pre_result_stage(event, context):
     assert context == context
-    game_id = ut.pubsub.event_data_to_game_id(event['data'])
+    game_id = event['attributes']['game_id']
     game = build_game(game_id)
     resp = ut.exceptions.ExceptionsHandler(
         game).handle_pre_results_stage_exceptions()
@@ -254,7 +254,7 @@ def pre_result_stage(event, context):
 
 def result_stage(event, context):
     assert context == context
-    game_id = ut.pubsub.event_data_to_game_id(event['data'])
+    game_id = event['attributes']['game_id']
     game = build_game(game_id)
     resp = ut.exceptions.ExceptionsHandler(
         game).handle_results_stage_exceptions()
