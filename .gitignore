@@ -3,7 +3,6 @@
 
 venv
 
-dev/ngrok
 dev/*.txt
 dev/*.out
 
