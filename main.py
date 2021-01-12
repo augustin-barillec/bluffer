@@ -44,6 +44,9 @@ def build_game(game_id):
 
 
 def slash_command(request):
+
+    logger.info(request.form)
+
     team_id = request.form['team_id']
     channel_id = request.form['channel_id']
     organizer_id = request.form['user_id']
