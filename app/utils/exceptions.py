@@ -3,6 +3,14 @@ from flask import make_response
 from app.version import VERSION
 
 
+def check_content_type(request, logger):
+    content_type = request.headers['content-type']
+    if content_type != 'application/x-www-form-urlencoded':
+        request_json = request.get_json(force=True)
+        logger.info(request_json)
+        return make_response('', 200)
+
+
 class ExceptionsHandler:
 
     def __init__(self, game):

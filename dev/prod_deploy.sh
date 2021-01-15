@@ -1,10 +1,10 @@
 #!/bin/bash
 
-rm -f prod_deploy_*.txt
-
 source ports.sh
 source project_id.sh
 source credentials.sh
+
+./clean_prod_deploy.sh
 
 gcloud auth activate-service-account \
 --project=$PROJECT_ID \

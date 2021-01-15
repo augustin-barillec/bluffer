@@ -44,6 +44,9 @@ def build_game(game_id):
 
 
 def slash_command(request):
+    resp = ut.exceptions.check_content_type(request, logger)
+    if resp:
+        return resp
     team_id = request.form['team_id']
     channel_id = request.form['channel_id']
     organizer_id = request.form['user_id']
@@ -63,6 +66,9 @@ def slash_command(request):
 
 
 def message_actions(request):
+    resp = ut.exceptions.check_content_type(request, logger)
+    if resp:
+        return resp
     message_action = json.loads(request.form['payload'])
     message_action_type = message_action['type']
     user_id = message_action['user']['id']
