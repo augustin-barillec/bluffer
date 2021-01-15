@@ -4,5 +4,5 @@
 
 for port in 5000 5001
 do
-    ./ngrok http $port --log=stdout > ngrok_$port.out &
+    ~/Softwares/ngrok http $port --log=stdout > ngrok_$port.out &
 done
