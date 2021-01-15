@@ -1,4 +1,5 @@
 -r requirements.txt
 functions-framework==1.2.0
 jupyterlab==2.2.9
+pytest==6.2.1
 
