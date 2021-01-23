@@ -91,11 +91,19 @@ class BlockBuilder:
 
     def build_guess_button_block(self):
         id_ = self.id_builder.build_guess_button_block_id()
-        return build_button_block('Your guess', id_)
+        if self.game.debug:
+            msg_displayed = 'your_guess_{}'.format(self.game.question)
+        else:
+            msg_displayed = 'Your guess'
+        return build_button_block(msg_displayed, id_)
 
     def build_vote_button_block(self):
         id_ = self.id_builder.build_vote_button_block_id()
-        return build_button_block('Your vote', id_)
+        if self.game.debug:
+            msg_displayed = 'your_vote_{}'.format(self.game.question)
+        else:
+            msg_displayed = 'Your vote'
+        return build_button_block(msg_displayed, id_)
 
     @staticmethod
     def build_users_blocks(users, kind, no_users_msg):

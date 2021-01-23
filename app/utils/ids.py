@@ -64,7 +64,7 @@ class IdBuilder:
             self.secret_prefix, object_name, self.game_id)
 
     def build_setup_view_id(self):
-        return self.build_slack_object_id('game_setup_view')
+        return self.build_slack_object_id('setup_view')
 
     def build_guess_view_id(self):
         return self.build_slack_object_id('guess_view')

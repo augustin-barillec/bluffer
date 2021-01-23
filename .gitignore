@@ -7,3 +7,5 @@ dev/*.txt
 dev/*.out
 
 conf.yaml
+
+cypress

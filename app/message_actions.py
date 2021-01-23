@@ -12,7 +12,7 @@ def handle_submission(
     game_id = ut.ids.slack_object_id_to_game_id(view_callback_id)
     game = build_game_func(game_id)
 
-    if view_callback_id.startswith(secret_prefix + '#game_setup_view'):
+    if view_callback_id.startswith(secret_prefix + '#setup_view'):
         return handle_setup_submission(game, view, logger)
 
     eh = ut.exceptions.ExceptionsHandler(game)
@@ -50,13 +50,16 @@ def handle_click(
             user_id, trigger_id, game, slack_operator, eh, logger)
 
 
-def handle_setup_submission(game, game_setup_view, logger):
-    question, truth, time_to_guess = ut.views.collect_game_setup(
-        game_setup_view)
+def handle_setup_submission(game, setup_view, logger):
+    question, truth, time_to_guess = ut.views.collect_setup(
+        setup_view)
     game.setup_submission = ut.time.get_now()
     game.question = question
     game.truth = truth
-    game.time_to_guess = time_to_guess
+    if game.debug:
+        game.time_to_guess = game.time_to_guess_debug
+    else:
+        game.time_to_guess = time_to_guess
     game.max_life_span = ut.time.build_max_life_span(
         game.time_to_guess, game.time_to_vote)
     resp = ut.exceptions.ExceptionsHandler(
@@ -64,13 +67,16 @@ def handle_setup_submission(game, game_setup_view, logger):
     if resp:
         return resp
 
-    game.dict = {
-        'version': game.version,
-        'setup_submission': game.setup_submission,
-        'question': game.question,
-        'truth': game.truth,
-        'time_to_guess': game.time_to_guess,
-        'max_life_span': game.max_life_span}
+    game.dict = dict()
+    for attribute in [
+        'version',
+        'setup_submission',
+        'question',
+        'truth',
+        'time_to_guess',
+        'max_life_span'
+    ]:
+        game.dict[attribute] = game.__dict__[attribute]
     ut.firestore.FirestoreEditor(game).set_game_dict()
     game.stage_triggerer.trigger_pre_guess_stage()
     logger.info('pre_guess_stage triggered, game_id={}'.format(game.id))

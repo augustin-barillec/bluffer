@@ -43,10 +43,12 @@ class Game:
         self.ref = self.firestore_reader.build_game_ref()
         self.team_dict = self.firestore_reader.get_team_dict()
 
+        self.debug = self.team_dict['debug']
         self.max_guessers = self.team_dict['max_guessers']
         self.max_running_games = self.team_dict['max_running_games']
         self.post_clean = self.team_dict['post_clean']
         self.slack_token = self.team_dict['slack_token']
+        self.time_to_guess_debug = self.team_dict['time_to_guess_debug']
         self.time_to_vote = self.team_dict['time_to_vote']
 
         self.slack_client = SlackClient(self.slack_token)

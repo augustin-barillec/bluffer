@@ -9,7 +9,7 @@ def get_view(basename):
 
 
 exception_view_template = get_view('exception.json')
-game_setup_view_template = get_view('game_setup.json')
+setup_view_template = get_view('setup.json')
 guess_view_template = get_view('guess.json')
 vote_view_template = get_view('vote.json')
 
@@ -29,8 +29,8 @@ def build_exception_response(msg):
     return res
 
 
-def build_game_setup_view(id_):
-    res = deepcopy(game_setup_view_template)
+def build_setup_view(id_):
+    res = deepcopy(setup_view_template)
     res['callback_id'] = id_
     return res
 
@@ -44,8 +44,8 @@ def build_guess_view(id_, question):
     return res
 
 
-def collect_game_setup(game_setup_view):
-    values = game_setup_view['state']['values']
+def collect_setup(setup_view):
+    values = setup_view['state']['values']
     question = values['question']['question']['value']
     truth = values['truth']['truth']['value']
     time_to_guess = int((values['time_to_guess']['time_to_guess']
@@ -74,7 +74,7 @@ class ViewBuilder:
 
     def build_setup_view(self):
         id_ = self.id_builder.build_setup_view_id()
-        return build_game_setup_view(id_)
+        return build_setup_view(id_)
 
     def build_guess_view(self):
         id_ = self.id_builder.build_guess_view_id()
