@@ -56,10 +56,7 @@ def handle_setup_submission(game, setup_view, logger):
     game.setup_submission = ut.time.get_now()
     game.question = question
     game.truth = truth
-    if game.debug:
-        game.time_to_guess = game.time_to_guess_debug
-    else:
-        game.time_to_guess = time_to_guess
+    game.time_to_guess = time_to_guess
     game.max_life_span = ut.time.build_max_life_span(
         game.time_to_guess, game.time_to_vote)
     resp = ut.exceptions.ExceptionsHandler(

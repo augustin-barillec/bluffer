@@ -269,7 +269,7 @@ def result_stage(event, context):
     game.dict['result_stage_over'] = True
     firestore_editor = ut.firestore.FirestoreEditor(game)
     firestore_editor.set_game_dict(merge=True)
-    if game.post_clean:
+    if game.post_delete:
         firestore_editor.delete_game()
     logger.info('sucessfully ended, game_id={}'.format(game_id))
     return make_response('', 200)

@@ -7,29 +7,62 @@ def get_team_ref(db, team_id):
     return teams_ref.document(team_id)
 
 
-def get_games_ref(db, team_id):
-    team_ref = get_team_ref(db, team_id)
-    return team_ref.collection('games')
-
-
-def get_game_ref(db, team_id, game_id):
-    games_ref = get_games_ref(db, team_id)
-    return games_ref.document(game_id)
-
-
 def get_team_dict(db, team_id):
     team_ref = get_team_ref(db, team_id)
     return team_ref.get().to_dict()
 
 
+def get_items_ref(db, team_id, kind):
+    assert kind in ('games', 'channels')
+    team_ref = get_team_ref(db, team_id)
+    return team_ref.collection(kind)
+
+
+def get_item_ref(db, team_id, kind, item_id):
+    items_ref = get_items_ref(db, team_id, kind)
+    return items_ref.document(item_id)
+
+
+def get_item_dict(db, team_id, kind, item_id):
+    item_ref = get_item_ref(db, team_id, kind, item_id)
+    return item_ref.get().to_dict()
+
+
+def get_item_dicts(db, team_id, kind):
+    items_ref = get_items_ref(db, team_id, kind)
+    return {item.id: item.to_dict() for item in items_ref.stream()}
+
+
+def get_channels_ref(db, team_id):
+    return get_items_ref(db, team_id, 'channels')
+
+
+def get_games_ref(db, team_id):
+    return get_items_ref(db, team_id, 'games')
+
+
+def get_channel_ref(db, team_id, channel_id):
+    return get_item_ref(db, team_id, 'channels', channel_id)
+
+
+def get_game_ref(db, team_id, game_id):
+    return get_item_ref(db, team_id, 'games', game_id)
+
+
+def get_channel_dict(db, team_id, channel_id):
+    return get_item_dict(db, team_id, 'channels', channel_id)
+
+
 def get_game_dict(db, team_id, game_id):
-    game_ref = get_game_ref(db, team_id, game_id)
-    return game_ref.get().to_dict()
+    return get_item_dict(db, team_id, 'games', game_id)
+
+
+def get_channel_dicts(db, team_id):
+    return get_item_dicts(db, team_id, 'channels')
 
 
 def get_game_dicts(db, team_id):
-    games_ref = get_games_ref(db, team_id)
-    return {g.id: g.to_dict() for g in games_ref.stream()}
+    return get_item_dicts(db, team_id, 'games')
 
 
 def set_game_dict(db, team_id, game_id, data, merge):
@@ -37,22 +70,24 @@ def set_game_dict(db, team_id, game_id, data, merge):
     game_ref.set(data, merge=merge)
 
 
-def delete_game(db, team_id, game_id):
-    game_ref = get_game_ref(db, team_id, game_id)
-    game_ref.delete()
-
-
 class FirestoreReader:
-    def __init__(self, db, team_id, game_id):
+    def __init__(self, db, team_id, channel_id, game_id):
         self.db = db
         self.team_id = team_id
+        self.channel_id = channel_id
         self.game_id = game_id
 
     def get_team_dict(self):
         return get_team_dict(self.db, self.team_id)
 
+    def get_channel_dict(self):
+        return get_channel_dict(self.db, self.team_id, self.channel_id)
+
     def get_game_dict(self):
         return get_game_dict(self.db, self.team_id, self.game_id)
+
+    def get_channel_dicts(self):
+        return get_channel_dicts(self.db, self.team_id)
 
     def get_game_dicts(self):
         return get_game_dicts(self.db, self.team_id)

@@ -39,19 +39,26 @@ class Game:
         self.graph_local_path = self.local_dir_path + '/' + self.graph_basename
 
         self.firestore_reader = utils.firestore.FirestoreReader(
-            self.db, self.team_id, self.id)
+            self.db, self.team_id, self.channel_id, self.id)
         self.ref = self.firestore_reader.build_game_ref()
         self.team_dict = self.firestore_reader.get_team_dict()
 
-        self.debug = self.team_dict['debug']
-        self.max_guessers = self.team_dict['max_guessers']
-        self.max_running_games = self.team_dict['max_running_games']
-        self.post_clean = self.team_dict['post_clean']
-        self.slack_token = self.team_dict['slack_token']
-        self.time_to_guess_debug = self.team_dict['time_to_guess_debug']
-        self.time_to_vote = self.team_dict['time_to_vote']
+        slack_token = self.team_dict['slack_token']
+        self.slack_client = SlackClient(slack_token)
 
-        self.slack_client = SlackClient(self.slack_token)
+        channel_dicts = self.firestore_reader.get_channel_dicts()
+        if self.channel_id in channel_dicts:
+            params = self.firestore_reader.get_channel_dict()
+        else:
+            params = self.team_dict
+
+        self.max_guessers_per_game = params['max_guessers_per_game']
+        self.max_running_games_per_organizer = \
+            params['max_running_games_per_organizer']
+        self.max_total_running_games = params['max_total_running_games']
+        self.post_delete = params['post_delete']
+        self.time_to_guess_options = params['time_to_guess_options']
+        self.time_to_vote = params['time_to_vote']
 
         self.exists = True
         self.dict = self.firestore_reader.get_game_dict()
@@ -70,6 +77,7 @@ class Game:
         self.indexed_signed_proposals = self.dict.get(
             'indexed_signed_proposals')
         self.lower_ts = self.dict.get('lower_ts')
+        self.max_guessers = self.dict.get('max_guessers')
         self.max_life_span = self.dict.get('max_life_span')
         self.max_score = self.dict.get('max_score')
         self.potential_guessers = self.dict.get('potential_guessers')
